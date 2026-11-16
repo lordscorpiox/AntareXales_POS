@@ -1,0 +1,114 @@
+name: Compilar AntareXales POS (Windows)
+
+# Compila dist/AntareXales_POS.exe con PyInstaller en un runner de Windows.
+#  - push / pull request a main y a ramas build/**: compila y guarda el .exe como artefacto (14 días).
+#  - etiqueta vX.Y (p. ej. v0.7): además publica un Release con el .exe.
+#  - Ejecución manual: pestaña Actions › «Compilar AntareXales POS (Windows)» › Run workflow.
+
+on:
+  push:
+    branches: [main, "build/**"]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compilar:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # solo se usa para crear el Release al subir una etiqueta
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Leer versión
+        id: ver
+        run: |
+          V=$(python -c "import version; print(version.VERSION)")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Versión del código: $V"
+          if [[ "${GITHUB_REF}" == refs/tags/v* && "${GITHUB_REF_NAME}" != "v$V" ]]; then
+            echo "::error::La etiqueta ${GITHUB_REF_NAME} no coincide con version.py (v$V)."
+            exit 1
+          fi
+
+      - name: Prueba rápida del servidor (antes de compilar)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python - <<'PY'
+          import os, tempfile
+          import database as db
+          db.get_db_path = lambda: os.path.join(tempfile.mkdtemp(), "ci.db")
+          import server
+          db.init_db()
+          j = server.app.test_client().get("/api/ping").get_json()["data"]
+          assert j["app"] == "AntareXales POS", j
+          assert "biopago" in server.METODOS
+          print("ping OK, versión", j["version"])
+          PY
+
+      - name: Compilar con PyInstaller
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed \
+            --name AntareXales_POS \
+            --icon "assets/icon.ico" \
+            --add-data "frontend;frontend" \
+            --add-data "assets;assets" \
+            --hidden-import stock --hidden-import errors --hidden-import inventario \
+            --hidden-import caja --hidden-import compras --hidden-import respaldo \
+            --collect-all webview \
+            main.py
+
+      - name: Verificar el ejecutable
+        run: |
+          test -s dist/AntareXales_POS.exe
+          ls -l dist/AntareXales_POS.exe
+          sha256sum dist/AntareXales_POS.exe | tee dist/AntareXales_POS.exe.sha256
+
+      - name: Guardar artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntareXales_POS_v${{ steps.ver.outputs.version }}_windows
+          path: |
+            dist/AntareXales_POS.exe
+            dist/AntareXales_POS.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publicar Release (solo con etiqueta vX.Y)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY' > notas.md
+          import re, version
+          s = open("CHANGELOG.md", encoding="utf-8").read()
+          m = re.search(r"^## " + re.escape(version.VERSION) + r"\s*\n(.*?)(?=^## |\Z)", s, re.S | re.M)
+          print(m.group(1).strip() if m else "Ver CHANGELOG.md")
+          PY
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/AntareXales_POS.exe dist/AntareXales_POS.exe.sha256 \
+            --title "AntareXales POS ${GITHUB_REF_NAME}" --notes-file notas.md --verify-tag
