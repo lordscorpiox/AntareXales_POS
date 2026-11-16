@@ -67,6 +67,7 @@ jobs:
           j = server.app.test_client().get("/api/ping").get_json()["data"]
           assert j["app"] == "AntareXales POS", j
           assert "biopago" in server.METODOS
+          import actualizador; assert actualizador.es_mayor("v0.10", "0.9")
           print("ping OK, versión", j["version"])
           PY
 
@@ -78,7 +79,7 @@ jobs:
             --add-data "frontend;frontend" \
             --add-data "assets;assets" \
             --hidden-import stock --hidden-import errors --hidden-import inventario \
-            --hidden-import caja --hidden-import compras --hidden-import respaldo \
+            --hidden-import caja --hidden-import compras --hidden-import respaldo --hidden-import actualizador \
             --collect-all webview \
             main.py
 

@@ -555,6 +555,11 @@ table.tbl{width:100%;border-collapse:collapse}
               <div class="hint">Lotes que vencen dentro de este plazo aparecen como «próximos a vencer».</div></div></div>
           <label class="chk"><input type="checkbox" name="caja_obligatoria"> Exigir un turno de caja abierto para cobrar (con arqueo al cierre)</label>
           <label class="chk"><input type="checkbox" name="cajero_cambia_tasa"> Permitir que los cajeros cambien la tasa BCV (si no, solo el administrador)</label>
+          <h3 class="sec-h">Actualizaciones</h3>
+          <div class="small muted">Versión instalada: <b class="ver-n"></b> · <span id="updRev">sin consultar</span></div>
+          <label class="chk"><input type="checkbox" name="actualizar_al_abrir"> Buscar actualizaciones al abrir la aplicación (requiere Internet)</label>
+          <div class="toolbar" style="margin:0"><button type="button" class="btn" data-act="updBuscar" id="btnUpdBuscar">🔄 Buscar actualizaciones</button></div>
+          <div id="updEstado" class="small"></div>
           <h3 class="sec-h">Impuestos (IVA)</h3>
           <label class="chk"><input type="checkbox" name="iva_activo"> Activar IVA (desactivado por defecto)</label>
           <div class="grid2" id="ivaCampos">
@@ -895,6 +900,7 @@ async function entrar() {
   await cargarBase();
   await cargarTurno();
   if (esAdmin()) cargarAlertaVenc();
+  if (esAdmin() && S.config.actualizar_al_abrir !== "0" && !S.updRevisado) { S.updRevisado = true; setTimeout(() => buscarActualizacion(false), 1500); }
   aplicarTema();
   $("#login").hidden = true; $("#app").hidden = false;  // se muestra recién con los datos cargados
   ir("ventas");
@@ -1667,6 +1673,50 @@ function formUsuario(u) {
     <div class="mfoot"><button type="button" class="btn" data-act="cerrarModal">Cancelar</button><button class="btn pri" type="submit">Guardar</button></div></form>`);
 }
 
+/* ============================== ACTUALIZACIONES (v0.8) ============================== */
+const fmtMB = b => (b ? (b / 1048576).toFixed(1) + " MB" : "");
+function cuerpoUpd(r) {
+  const nuevo = `<b>Nueva versión ${esc(r.ultima)}</b> (instalada: ${esc(r.actual)})${r.publicada ? " · publicada " + esc(r.publicada) : ""}${r.tamano ? " · " + fmtMB(r.tamano) : ""}`;
+  const notas = r.notas ? `<pre style="white-space:pre-wrap;font:inherit;max-height:240px;overflow:auto;margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px">${esc(r.notas)}</pre>` : "";
+  const como = r.puede_instalar ? `<div class="hint">Se descarga, se verifica (SHA-256), se respalda la base de datos y la aplicación se reinicia sola.</div>`
+    : `<div class="hint">${r.instalable_en_este_modo ? "El Release publicado no trae el .exe verificado; descárguelo manualmente desde GitHub." : "La instalación automática solo funciona en el ejecutable de Windows (.exe). Descargue la versión desde GitHub:"}
+       ${r.pagina ? `<div style="font-family:Consolas,monospace;word-break:break-all;margin-top:4px">${esc(r.pagina)}</div>` : ""}</div>`;
+  return nuevo + notas + como;
+}
+function pintarUpd(r) {
+  const el = $("#updEstado"); if (!el) return;
+  el.innerHTML = r.hay_nueva
+    ? `<div class="card" style="padding:12px;margin-top:6px">${cuerpoUpd(r)}<div class="toolbar" style="margin:8px 0 0">${r.puede_instalar ? `<button type="button" class="btn pri" data-act="updInstalar">⬇ Instalar ahora</button>` : `<button type="button" class="btn" data-act="updCopiar">Copiar enlace</button>`}</div></div>`
+    : r.sin_versiones ? `<span class="badge gray">Todavía no hay versiones publicadas en GitHub</span>`
+    : `<span class="badge ok">✓ Tiene la última versión (${esc(r.actual)})</span>`;
+}
+const buscarActualizacion = async manual => {
+  const btn = $("#btnUpdBuscar");
+  try {
+    if (manual && btn) { btn.disabled = true; btn.textContent = "Buscando…"; }
+    const r = await api("POST", "/api/actualizacion/buscar");
+    S.upd = r;
+    if ($("#updRev")) $("#updRev").textContent = "última búsqueda: ahora";
+    pintarUpd(r);
+    if (r.hay_nueva && !manual && !$("#modalClave").classList.contains("open") && !$("#modalGen").classList.contains("open")) {
+      abrirModal(`<h3 style="margin-top:0">Hay una actualización disponible</h3>${cuerpoUpd(r)}
+        <div class="mfoot"><button type="button" class="btn" data-act="cerrarModal">Más tarde</button>${r.puede_instalar ? `<button type="button" class="btn pri" data-act="updInstalar">⬇ Instalar ahora</button>` : `<button type="button" class="btn pri" data-act="updCopiar">Copiar enlace</button>`}</div>`);
+    } else if (manual && !r.hay_nueva) toast(r.sin_versiones ? "Todavía no hay versiones publicadas en GitHub" : "Ya tiene la última versión (" + r.actual + ")", r.sin_versiones ? "warn" : "ok");
+  } catch (e) {
+    if (manual) toast(e.message, "err");   // al abrir, sin Internet no se molesta al usuario
+  } finally { if (manual && btn) { btn.disabled = false; btn.textContent = "🔄 Buscar actualizaciones"; } }
+};
+const instalarActualizacion = safe(async () => {
+  const r = S.upd; if (!r || !r.hay_nueva || !r.puede_instalar) return;
+  cerrarModal();
+  if (!await confirmar(`Se descargará la versión ${r.ultima} (${fmtMB(r.tamano)}), se respaldará la base de datos y la aplicación se reiniciará.\nNo cierre la ventana hasta que termine.\n¿Continuar?`, "Actualizar")) return;
+  abrirModal(`<h3 style="margin-top:0">Actualizando…</h3><div class="hint">Descargando y verificando la versión ${esc(r.ultima)}. No cierre la aplicación.</div>`);
+  try {
+    await api("POST", "/api/actualizacion/instalar");
+    $("#modalGenBox").innerHTML = `<h3 style="margin-top:0">Reiniciando…</h3><div class="hint">La versión ${esc(r.ultima)} se instaló. La aplicación se cerrará y volverá a abrirse sola en unos segundos.</div>`;
+  } catch (e) { cerrarModal(); throw e; }
+});
+
 /* ============================== 7. RESPALDO ============================== */
 const initRespaldo = safe(async () => {
   const d = await api("GET", "/api/backup/db-path");
@@ -1759,6 +1809,10 @@ function initConfig() {
   f.elements.caja_obligatoria.checked = c.caja_obligatoria === "1";
   f.elements.cajero_cambia_tasa.checked = c.cajero_cambia_tasa === "1";
   f.elements.dias_alerta_vencimiento.value = c.dias_alerta_vencimiento || "30";
+  f.elements.actualizar_al_abrir.checked = c.actualizar_al_abrir !== "0";
+  $$(".ver-n").forEach(e => { e.textContent = (S.info && S.info.version) || ""; });
+  api("GET", "/api/actualizacion").then(u => { $("#updRev").textContent = u.ultima_revision ? "última búsqueda: " + fmtFecha(u.ultima_revision) : "sin consultar"; }).catch(() => {});
+  if (S.upd && S.upd.hay_nueva) pintarUpd(S.upd);
   cargarAlmacenes().then(() => { f.elements.almacen_ventas.innerHTML = `<option value="">Principal (por defecto)</option>` + S.almacenes.filter(a => a.activo).map(a => `<option value="${a.id}">${esc(a.nombre)}</option>`).join(""); f.elements.almacen_ventas.value = c.almacen_ventas || ""; });
   S.logoTmp = c.logo || ""; pintarLogo();
   // Los contadores de documentos avanzan en el servidor: se refrescan solo esos campos (sin tocar lo que el usuario esté editando).
@@ -2393,6 +2447,7 @@ const FORMS = {
       sig_factura: d.sig_factura, sig_proforma: d.sig_proforma, sig_nota: d.sig_nota, proforma_validez: d.proforma_validez, doc_pie: d.doc_pie,
       almacen_ventas: d.almacen_ventas || "", dias_alerta_vencimiento: d.dias_alerta_vencimiento, caja_obligatoria: f.elements.caja_obligatoria.checked ? "1" : "0",
       cajero_cambia_tasa: f.elements.cajero_cambia_tasa.checked ? "1" : "0",
+      actualizar_al_abrir: f.elements.actualizar_al_abrir.checked ? "1" : "0",
     });
     await cargarProductos();
     S.tasa = parseFloat(S.config.tasa_bcv) || 1; actualizarTasaUI(); sessionStorage.removeItem("mv_tema"); aplicarTema(); toast("Configuración guardada", "ok");
@@ -2411,6 +2466,8 @@ const ACT = {
   tema: () => { const oscuro = !document.documentElement.classList.contains("dark"); sessionStorage.setItem("mv_tema", oscuro ? "oscuro" : "claro"); aplicarTema(); },
   cerrarModal, cerrarTicket, imprimir: () => window.print(),
   contacto: () => abrirContacto(), cerrarContacto,
+  updBuscar: () => buscarActualizacion(true), updInstalar: () => instalarActualizacion(),
+  updCopiar: () => copiarTexto((S.upd && S.upd.pagina) || ""),
   docFactura: el => { cerrarTicket(); docDeVenta("factura", +el.dataset.id); },
   docNota: el => { cerrarTicket(); docDeVenta("nota_entrega", +el.dataset.id); },
   docProforma: () => { if (!S.carrito.length) { toast("Agregue productos al carrito para generar la proforma", "warn"); return; } formDocumento("proforma", {}); },

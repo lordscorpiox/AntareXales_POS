@@ -84,6 +84,7 @@ def main():
     db.init_db()
     httpd, puerto = server.crear_servidor("127.0.0.1", 5000)
     threading.Thread(target=httpd.serve_forever, name="flask-server", daemon=True).start()
+    server.actualizador.limpiar_restos()  # borra una descarga de actualización a medias
     server.respaldo.iniciar_automatico()  # copia diaria de la base de datos (carpeta «respaldos»)
 
     # Sin esto WebView2 cancela cualquier descarga (valor por defecto de pywebview >= 5).

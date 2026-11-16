@@ -303,7 +303,7 @@ def tasa_vigente(conn, data, cfg=None):
 
 
 # Rutas que solo puede usar el administrador (inventario avanzado, compras, almacenes...)
-SOLO_ADMIN = ("/api/usuarios", "/api/backup", "/api/almacenes", "/api/traslados", "/api/compras", "/api/proveedores",
+SOLO_ADMIN = ("/api/usuarios", "/api/backup", "/api/actualizacion", "/api/almacenes", "/api/traslados", "/api/compras", "/api/proveedores",
               "/api/conteos", "/api/mermas", "/api/vencimientos", "/api/kardex", "/api/reportes")
 
 
@@ -466,7 +466,7 @@ def config_put():
             if v:
                 v = str(stk.almacen_valido(conn, v, "El almacén de ventas"))
             nuevos[k] = v
-        elif k in ("caja_obligatoria", "cajero_cambia_tasa"):
+        elif k in ("caja_obligatoria", "cajero_cambia_tasa", "actualizar_al_abrir"):
             nuevos[k] = "1" if str(v).lower() in ("1", "true", "si", "sí") else "0"
         elif k == "respaldo_auto_dias":
             n = int(num(v, "Los respaldos automáticos a conservar", 0, default=14.0))
@@ -2054,6 +2054,9 @@ compras.register(app, _sys.modules[__name__])
 import respaldo  # noqa: E402
 
 respaldo.register(app, _sys.modules[__name__])
+import actualizador  # noqa: E402
+
+actualizador.register(app, _sys.modules[__name__])
 
 
 # --------------------------------------------------------------------------- arranque

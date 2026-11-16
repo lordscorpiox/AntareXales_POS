@@ -511,6 +511,7 @@ DEFAULT_CONFIG = {
     "almacen_ventas": "",
     "cajero_cambia_tasa": "0",
     "respaldo_auto_dias": "14",
+    "actualizar_al_abrir": "1",   # v0.8: buscar actualizaciones al abrir (solo administrador)
     "caja_obligatoria": "0",
     "dias_alerta_vencimiento": "30",
 }

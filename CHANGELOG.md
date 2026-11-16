@@ -3,6 +3,16 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.8
+- **Actualizaciones automáticas.** La aplicación consulta el último *Release* de GitHub (`lordscorpiox/AntareXales_POS`):
+  - **Al abrir** (solo si entra el administrador y la opción está activa) aparece un aviso «Hay una actualización disponible» con la versión y las novedades. Si no hay Internet, no muestra ningún error.
+  - **Configuración › Actualizaciones**: botón «Buscar actualizaciones», casilla «Buscar actualizaciones al abrir la aplicación» (activada por defecto) y fecha de la última búsqueda.
+  - **Instalar ahora** (solo en el .exe de Windows): descarga el nuevo .exe, verifica su huella **SHA-256** (publicada en el mismo Release), hace un **respaldo de la base de datos**, y la aplicación se cierra y se reabre sola ya actualizada. Si algo falla (descarga cortada, huella distinta, archivo que no es un .exe, carpeta sin permiso de escritura) no se instala nada y el .exe actual queda intacto.
+  - Solo se aceptan descargas del repositorio oficial en GitHub. En modo desarrollo (sin .exe) solo informa y permite copiar el enlace.
+  - Solo el administrador puede buscar e instalar.
+- Para publicar una versión: subir `version.py` y el `CHANGELOG`, crear la etiqueta `vX.Y` en GitHub; la compilación automática genera el Release con `AntareXales_POS.exe` y `AntareXales_POS.exe.sha256`, que es lo que las instalaciones detectan.
+- Nota: la 0.7 y anteriores no traen el actualizador; la 0.8 se instala una vez a mano y de ahí en adelante se actualiza sola.
+
 ## 0.7
 - **Nuevo método de pago: Biopago** (en Bs). Aparece en Ventas, reportes, historial y cierre de caja; se trata como los demás métodos que no son efectivo (se concilia aparte, no entra al arqueo).
 - **Corrección del vuelto en Bs**: una venta de 1.100 Bs (precio fijo en Bs) pagada con 1.500 Bs en efectivo mostraba un vuelto de 397,78 Bs en vez de 400. Causa: el cálculo convertía Bs → USD (redondeado a centavos) → Bs, y con tasas altas un centavo vale varios bolívares. Ahora, cuando todo se paga en Bs, el total, lo que falta y el vuelto se calculan directamente en Bs (exactos); la pantalla, el servidor, el ticket y el arqueo de caja coinciden. Con pagos en USD o mixtos el cálculo sigue en USD como antes.

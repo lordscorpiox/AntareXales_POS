@@ -28,7 +28,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed ^
     --add-data "frontend;frontend" ^
     --add-data "assets;assets" ^
     --hidden-import stock --hidden-import errors --hidden-import inventario ^
-    --hidden-import caja --hidden-import compras --hidden-import respaldo ^
+    --hidden-import caja --hidden-import compras --hidden-import respaldo --hidden-import actualizador ^
     --collect-all webview ^
     main.py
 if errorlevel 1 goto :fin_error

@@ -56,6 +56,9 @@ El botón 🖼 junto al buscador de Ventas muestra u oculta las fotos (vista com
 - **Inventario** (administrador): pestañas Movimientos (kardex), Vencimientos, Conteo físico, Mermas y Almacenes; botones *＋Variantes* y *＋Combo*. Las ventas salen del «almacén de ventas» elegido en Configuración y consumen primero el lote que vence antes (FEFO).
 - Los datos de versiones anteriores se migran solos al abrir la app; haga un respaldo antes de actualizar.
 
+## Actualizaciones (v0.8)
+La app busca nuevas versiones en los Releases de GitHub al abrir (y desde Configuración › Actualizaciones). En el .exe de Windows el administrador puede instalarla con un clic (verifica SHA-256 y respalda la base de datos). Para publicar: subir `version.py`, crear la etiqueta `vX.Y`; GitHub Actions compila y publica el Release.
+
 ## Métodos de pago
 Efectivo Bs, Efectivo USD, Transferencia, Pago móvil, Zelle, Tarjeta y **Biopago** (v0.7). Solo el efectivo entra al arqueo de caja; los demás se reportan como totales para conciliar. Si todo se paga en Bs, el vuelto se calcula en Bs exactos (v0.7).
 
