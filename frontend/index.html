@@ -211,6 +211,8 @@ table.tbl{width:100%;border-collapse:collapse}
 .sec h3{font-size:14px;margin-bottom:12px;font-weight:700;letter-spacing:.02em}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .about{display:flex;gap:16px;align-items:center}
+.tabp{display:grid;gap:12px}.tabp[hidden]{display:none!important}
+.tabp.about{display:flex}.tabp.about[hidden]{display:none!important}
 .about img{width:64px;height:64px;filter:drop-shadow(0 4px 14px rgba(229,56,77,.4))}
 .about .t{font-size:18px;font-weight:800;letter-spacing:-.3px}
 .about .t .x{color:var(--pri)}
@@ -306,9 +308,73 @@ table.tbl{width:100%;border-collapse:collapse}
 .espera-item{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line)}
 .espera-item:last-child{border-bottom:0}
 .comprow{display:grid;grid-template-columns:1fr 90px 28px;gap:8px;margin-bottom:6px;align-items:center}
+/* ---- pantalla inicial animada (v0.10): lluvia de símbolos azul eléctrico + nombre con la X roja resplandeciente ---- */
+#splash{position:fixed;inset:0;z-index:9999;background:radial-gradient(900px 520px at 50% 50%,#07102a 0%,#03050c 70%);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;transition:opacity .7s ease}
+#splash.out{opacity:0;pointer-events:none}
+#splashRain{position:absolute;inset:0;width:100%;height:100%}
+#splash .sp-center{position:relative;text-align:center;padding:0 16px}
+#splash .sp-name{display:inline-flex;align-items:baseline;justify-content:center;font-family:"Inter","Segoe UI",system-ui,sans-serif;font-weight:800;letter-spacing:-.03em;color:#fff;font-size:clamp(38px,9vw,104px);line-height:1.15;white-space:nowrap;filter:drop-shadow(0 0 18px rgba(20,20,40,.9))}
+#splash .sp-l{display:inline-block;overflow:hidden;max-width:0;opacity:0;padding:.04em 0;text-shadow:0 0 22px rgba(47,125,255,.55);animation:spExpand 1.25s cubic-bezier(.16,.84,.24,1) 1.55s forwards}
+#splash .sp-x{display:inline-block;color:#ff2d46;opacity:0;transform:scale(2.6);filter:blur(14px);position:relative;
+  animation:spX .9s cubic-bezier(.2,.9,.3,1) .35s forwards,spGlow 1.15s ease-in-out 1.25s infinite alternate}
+#splash .sp-x::after{content:"";position:absolute;left:50%;top:52%;width:2.2em;height:2.2em;transform:translate(-50%,-50%) scale(0);border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,45,70,.55),rgba(255,45,70,0) 68%);animation:spFlash 1.6s ease-out .55s forwards}
+#splash .sp-tag{margin-top:18px;letter-spacing:.5em;font-size:clamp(10px,1.4vw,15px);color:#6aa3ff;text-transform:uppercase;font-weight:700;opacity:0;animation:spFade .8s ease 2.9s forwards;text-shadow:0 0 14px rgba(47,125,255,.8)}
+#splash .sp-skip{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-size:11px;letter-spacing:.12em;color:#4a5a86;text-transform:uppercase;opacity:0;animation:spFade .6s ease 1.2s forwards}
+@keyframes spX{0%{opacity:0;transform:scale(2.6);filter:blur(14px)}60%{opacity:1}100%{opacity:1;transform:scale(1);filter:blur(0)}}
+@keyframes spGlow{from{text-shadow:0 0 8px #ff2d46,0 0 22px #e5384d,0 0 44px rgba(229,56,77,.55)}to{text-shadow:0 0 14px #ff5a6e,0 0 38px #ff2d46,0 0 86px rgba(255,45,70,.85),0 0 130px rgba(255,45,70,.45)}}
+@keyframes spFlash{0%{transform:translate(-50%,-50%) scale(0);opacity:1}100%{transform:translate(-50%,-50%) scale(3.2);opacity:0}}
+@keyframes spExpand{to{max-width:7em;opacity:1}}
+@keyframes spFade{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){#splash .sp-l,#splash .sp-x,#splash .sp-tag,#splash .sp-skip{animation:none!important;max-width:7em;opacity:1;transform:none;filter:none}#splash .sp-x{text-shadow:0 0 18px #ff2d46,0 0 44px rgba(229,56,77,.6)}}
 </style>
 </head>
 <body>
+<!-- Pantalla inicial animada: se cierra sola, o al tocarla / pulsar una tecla -->
+<div id="splash" aria-hidden="true">
+  <canvas id="splashRain"></canvas>
+  <div class="sp-center">
+    <div class="sp-name"><span class="sp-l">Antare</span><span class="sp-x">X</span><span class="sp-l">ales POS</span></div>
+    <div class="sp-tag">Punto de venta</div>
+  </div>
+  <div class="sp-skip">Clic para continuar</div>
+</div>
+<script>
+(function () {
+  const sp = document.getElementById("splash"); if (!sp) return;
+  // Las pruebas automáticas (navigator.webdriver) no esperan la animación, salvo que se pida con ?splash
+  if (navigator.webdriver && !/[?&]splash\b/.test(location.search)) { sp.remove(); return; }
+  const reducir = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const cv = document.getElementById("splashRain"), cx = cv.getContext("2d");
+  const SIMB = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾅﾆﾇﾈﾊﾋﾎﾏﾐﾑﾒﾓﾔﾕﾗﾘﾜ0123456789<>/{}[]$%#@&*+=:;ΣΩ∆".split("");
+  const TAM = 18; let cols = [], ancho = 0, alto = 0, raf = 0, ult = 0, cerrado = false;
+  function medir() {
+    const d = Math.min(window.devicePixelRatio || 1, 2); ancho = innerWidth; alto = innerHeight;
+    cv.width = ancho * d; cv.height = alto * d; cx.setTransform(d, 0, 0, d, 0, 0);
+    cx.fillStyle = "#03050c"; cx.fillRect(0, 0, ancho, alto);
+    const n = Math.ceil(ancho / TAM); cols = Array.from({length: n}, (_, i) => cols[i] ?? -Math.random() * alto / TAM);
+  }
+  function pintar(t) {
+    raf = requestAnimationFrame(pintar);
+    if (t - ult < 45) return; ult = t;               // ~22 cuadros por segundo: efecto clásico y ligero
+    cx.fillStyle = "rgba(3,5,12,.09)"; cx.fillRect(0, 0, ancho, alto);
+    cx.font = `700 ${TAM - 2}px "Consolas","Courier New",monospace`;
+    for (let i = 0; i < cols.length; i++) {
+      const y = cols[i] * TAM, c = SIMB[(Math.random() * SIMB.length) | 0];
+      cx.fillStyle = "#d6ecff"; cx.shadowColor = "#1f8bff"; cx.shadowBlur = 10; cx.fillText(c, i * TAM, y);   // cabeza brillante
+      cx.shadowBlur = 0; cx.fillStyle = Math.random() < .5 ? "#1f8bff" : "#0a6cff"; cx.fillText(SIMB[(Math.random() * SIMB.length) | 0], i * TAM, y - TAM);
+      cols[i] = y > alto && Math.random() > .972 ? 0 : cols[i] + 1;
+    }
+  }
+  function cerrar() {
+    if (cerrado) return; cerrado = true; sp.classList.add("out");
+    setTimeout(() => { cancelAnimationFrame(raf); removeEventListener("resize", medir); sp.remove(); }, 750);
+  }
+  if (!reducir) { medir(); addEventListener("resize", medir); raf = requestAnimationFrame(pintar); }
+  sp.addEventListener("click", cerrar); addEventListener("keydown", cerrar, {once: true});
+  setTimeout(cerrar, reducir ? 1400 : 4600);
+})();
+</script>
 
 <!-- LOGIN -->
 <div id="login" class="login" hidden>
@@ -526,7 +592,15 @@ table.tbl{width:100%;border-collapse:collapse}
       </section>
 
       <section id="v-config" class="view">
-        <form data-form="config" class="card sec" style="max-width:720px;display:grid;gap:12px">
+        <form data-form="config" id="cfgForm" class="card sec" style="max-width:760px;display:grid;gap:12px">
+        <div class="tabs" id="cfgTabs" role="tablist">
+          <button type="button" role="tab" data-act="cfgTab" data-t="general" class="on">General</button>
+          <button type="button" role="tab" data-act="cfgTab" data-t="ventas">Ventas e inventario</button>
+          <button type="button" role="tab" data-act="cfgTab" data-t="impuestos">Impuestos y documentos</button>
+          <button type="button" role="tab" data-act="cfgTab" data-t="actualizaciones">Actualizaciones</button>
+          <button type="button" role="tab" data-act="cfgTab" data-t="acerca">Acerca de</button>
+        </div>
+          <div class="tabp" data-tabp="general">
           <h3>Datos del negocio</h3>
           <div class="grid2">
             <div class="field"><label>Nombre del negocio</label><input name="negocio_nombre"></div>
@@ -544,12 +618,12 @@ table.tbl{width:100%;border-collapse:collapse}
               <input type="file" id="cfgLogoFile" accept="image/*">
               <button class="btn sm" type="button" data-act="quitarLogo">Quitar</button>
             </div></div>
-          <div class="grid2">
-            <div class="field"><label>% de ganancia por defecto</label><input name="ganancia_default" type="number" step="any" min="0"><div class="hint">Se propone al crear un producto (ganancia sobre el costo).</div></div>
-            <div class="field"><label>Tema de la aplicación</label><select name="tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option></select></div>
+          <div class="field" style="max-width:340px"><label>Tema de la aplicación</label><select name="tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option></select></div>
           </div>
+          <div class="tabp" data-tabp="ventas" hidden>
+          <h3>Ventas, inventario y caja</h3>
+          <div class="field" style="max-width:340px"><label>% de ganancia por defecto</label><input name="ganancia_default" type="number" step="any" min="0"><div class="hint">Se propone al crear un producto (ganancia sobre el costo).</div></div>
           <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--text)"><input type="checkbox" name="permitir_stock_negativo"> Permitir vender sin stock suficiente (stock negativo)</label>
-          <h3 class="sec-h">Inventario y caja</h3>
           <div class="grid2">
             <div class="field"><label>Almacén desde el que se vende</label><select name="almacen_ventas"></select>
               <div class="hint">Las ventas descuentan de este almacén (primero el lote que vence antes).</div></div>
@@ -557,12 +631,9 @@ table.tbl{width:100%;border-collapse:collapse}
               <div class="hint">Lotes que vencen dentro de este plazo aparecen como «próximos a vencer».</div></div></div>
           <label class="chk"><input type="checkbox" name="caja_obligatoria"> Exigir un turno de caja abierto para cobrar (con arqueo al cierre)</label>
           <label class="chk"><input type="checkbox" name="cajero_cambia_tasa"> Permitir que los cajeros cambien la tasa BCV (si no, solo el administrador)</label>
-          <h3 class="sec-h">Actualizaciones</h3>
-          <div class="small muted">Versión instalada: <b class="ver-n"></b> · <span id="updRev">sin consultar</span></div>
-          <label class="chk"><input type="checkbox" name="actualizar_al_abrir"> Buscar actualizaciones al abrir la aplicación (requiere Internet)</label>
-          <div class="toolbar" style="margin:0"><button type="button" class="btn" data-act="updBuscar" id="btnUpdBuscar">🔄 Buscar actualizaciones</button></div>
-          <div id="updEstado" class="small"></div>
-          <h3 class="sec-h">Impuestos (IVA)</h3>
+          </div>
+          <div class="tabp" data-tabp="impuestos" hidden>
+          <h3>Impuestos (IVA)</h3>
           <label class="chk"><input type="checkbox" name="iva_activo"> Activar IVA (desactivado por defecto)</label>
           <div class="grid2" id="ivaCampos">
             <div class="field"><label>Alícuota de IVA (%)</label><input name="iva_pct" type="number" step="any" min="0" max="100"><div class="hint">En Venezuela la general es 16 %.</div></div>
@@ -578,10 +649,18 @@ table.tbl{width:100%;border-collapse:collapse}
           <div class="grid2">
             <div class="field"><label>Validez de la proforma (días)</label><input name="proforma_validez" type="number" min="1" max="365" step="1"></div>
             <div class="field"><label>Texto al pie de los documentos</label><input name="doc_pie" placeholder="Condiciones de pago, datos bancarios…"></div></div>
-          <div class="mfoot"><button class="btn pri" type="submit">Guardar configuración</button></div>
-        </form>
-        <div class="card sec about" style="max-width:720px;margin-top:16px"><img src="/assets/icon.png" alt="">
+          </div>
+          <div class="tabp" data-tabp="actualizaciones" hidden>
+          <h3>Actualizaciones</h3>
+          <div class="small muted">Versión instalada: <b class="ver-n"></b> · <span id="updRev">sin consultar</span></div>
+          <label class="chk"><input type="checkbox" name="actualizar_al_abrir"> Buscar actualizaciones al abrir la aplicación (requiere Internet)</label>
+          <div class="toolbar" style="margin:0"><button type="button" class="btn" data-act="updBuscar" id="btnUpdBuscar">🔄 Buscar actualizaciones</button></div>
+          <div id="updEstado" class="small"></div>
+          </div>
+        <div class="tabp about" data-tabp="acerca" hidden><img src="/assets/icon.png" alt="">
           <div><div class="t">Antare<span class="x">X</span>ales POS</div><div class="muted">Versión <b class="ver"></b></div><div class="hint">Desarrollado por <span class="autor"></span><div class="powered"></div></div></div></div>
+          <div class="mfoot" id="cfgPie"><button class="btn pri" type="submit">Guardar configuración</button></div>
+        </form>
       </section>
 
     </main>
@@ -1799,8 +1878,17 @@ const importarCsv = safe(async () => {
 });
 
 /* ============================== 8. CONFIGURACIÓN ============================== */
+const CFG_TABS = ["general", "ventas", "impuestos", "actualizaciones", "acerca"];
+function cfgTab(t) {
+  if (!CFG_TABS.includes(t)) t = "general";
+  S.cfgTab = t;
+  $$("#cfgTabs button").forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+  $$("#cfgForm .tabp").forEach(p => { p.hidden = p.dataset.tabp !== t; });
+  $("#cfgPie").hidden = t === "acerca";   // «Acerca de» no tiene nada que guardar
+}
 function initConfig() {
   const f = $("#v-config form"), c = S.config;
+  cfgTab(S.cfgTab || "general");
   for (const k of ["negocio_nombre", "rif", "direccion", "telefono", "ticket_pie", "tasa_bcv"]) f.elements[k].value = c[k] ?? "";
   f.elements.tema.value = c.tema || "oscuro";
   f.elements.ganancia_default.value = c.ganancia_default ?? "30";
@@ -2468,7 +2556,7 @@ const ACT = {
   tema: () => { const oscuro = !document.documentElement.classList.contains("dark"); sessionStorage.setItem("mv_tema", oscuro ? "oscuro" : "claro"); aplicarTema(); },
   cerrarModal, cerrarTicket, imprimir: () => window.print(),
   contacto: () => abrirContacto(), cerrarContacto,
-  updBuscar: () => buscarActualizacion(true), updInstalar: () => instalarActualizacion(),
+  cfgTab: el => cfgTab(el.dataset.t), updBuscar: () => buscarActualizacion(true), updInstalar: () => instalarActualizacion(),
   updCopiar: () => copiarTexto((S.upd && S.upd.pagina) || ""),
   docFactura: el => { cerrarTicket(); docDeVenta("factura", +el.dataset.id); },
   docNota: el => { cerrarTicket(); docDeVenta("nota_entrega", +el.dataset.id); },

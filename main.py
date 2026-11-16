@@ -110,6 +110,7 @@ def main():
         width=1366,
         height=820,
         min_size=(1100, 650),
+        maximized=True,   # v0.10: abre ocupando toda la pantalla (width/height solo cuentan al restaurar la ventana)
         text_select=True,
     )
     webview.start(debug=debug)

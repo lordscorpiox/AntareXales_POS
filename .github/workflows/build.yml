@@ -74,6 +74,8 @@ jobs:
           assert j["app"] == "AntareXales POS", j
           assert "biopago" in server.METODOS
           import actualizador; assert actualizador.es_mayor("v0.10", "0.9")
+          import inspect, webview
+          assert "maximized" in inspect.signature(webview.create_window).parameters, "pywebview sin soporte de maximized"
           print("ping OK, versión", j["version"])
           PY
 

@@ -3,6 +3,12 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.10
+- **Pantalla inicial animada** al abrir la aplicación: lluvia de símbolos en azul eléctrico (estilo Matrix) sobre fondo oscuro; aparece primero la **X roja** con resplandor y luego se despliega el resto del nombre «AntareXales POS». Dura unos 4,5 s y se salta con un clic o cualquier tecla. Con «reducir movimiento» activado en Windows se muestra el nombre fijo y se cierra enseguida.
+- **Configuración en pestañas**: General · Ventas e inventario · Impuestos y documentos · Actualizaciones · Acerca de. Un solo botón «Guardar configuración» guarda lo de todas las pestañas, y la aplicación recuerda la pestaña en la que estaba.
+- **Búsqueda de actualizaciones activa por defecto** (también al abrir una base de datos creada con una versión anterior). Si el administrador la desactiva, se respeta su elección.
+- **La ventana abre maximizada**, ocupando toda la pantalla (al restaurarla conserva un tamaño cómodo).
+
 ## 0.9
 - **Contacto**: la ventana del desarrollador ahora muestra **Telegram `@lordscorpiox`** (en lugar del WhatsApp) y el correo **lord.scorpiox@gmail.com**. Al tocarlos se abren fuera de la aplicación: Telegram (aplicación o navegador) y el programa de correo. Cada uno conserva su botón «Copiar». Solo estos dos enlaces pueden abrirse desde la aplicación.
 - **Crédito**: ahora dice «Desarrollado por **Lord Scorpiox**» y, debajo, «Powered by Claude AI» (pantalla de inicio, barra lateral y Configuración).
