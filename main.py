@@ -51,8 +51,21 @@ def instancia_unica():
     return ctypes.windll.kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
 
 
+ENLACES_PERMITIDOS = (ver.CONTACT_TELEGRAM_URL, ver.CONTACT_EMAIL_URL)
+
+
 class Api:
     """Métodos expuestos a JavaScript como window.pywebview.api.*"""
+
+    def abrir_externo(self, url):
+        """Abre Telegram (navegador/aplicación) o el programa de correo. Solo acepta los enlaces de contacto."""
+        import webbrowser
+        if url not in ENLACES_PERMITIDOS:
+            return {"ok": False, "error": "Enlace no permitido"}
+        try:
+            return {"ok": bool(webbrowser.open(url))}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def guardar_archivo(self, nombre, contenido_base64):
         """Muestra el diálogo 'Guardar como' del sistema y escribe el archivo."""

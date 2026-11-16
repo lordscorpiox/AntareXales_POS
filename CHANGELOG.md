@@ -3,6 +3,12 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.9
+- **Contacto**: la ventana del desarrollador ahora muestra **Telegram `@lordscorpiox`** (en lugar del WhatsApp) y el correo **lord.scorpiox@gmail.com**. Al tocarlos se abren fuera de la aplicación: Telegram (aplicación o navegador) y el programa de correo. Cada uno conserva su botón «Copiar». Solo estos dos enlaces pueden abrirse desde la aplicación.
+- **Crédito**: ahora dice «Desarrollado por **Lord Scorpiox**» y, debajo, «Powered by Claude AI» (pantalla de inicio, barra lateral y Configuración).
+- Corrección en la compilación automática: las notas del Release ya no salen con caracteres dañados.
+- Es la primera versión que se puede instalar desde la 0.8 con «Buscar actualizaciones».
+
 ## 0.8
 - **Actualizaciones automáticas.** La aplicación consulta el último *Release* de GitHub (`lordscorpiox/AntareXales_POS`):
   - **Al abrir** (solo si entra el administrador y la opción está activa) aparece un aviso «Hay una actualización disponible» con la versión y las novedades. Si no hay Internet, no muestra ningún error.

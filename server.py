@@ -384,7 +384,9 @@ def assets(nombre):
 @app.get("/api/ping")
 def ping():
     return ok({"app": ver.APP_NAME, "version": ver.VERSION, "autor": ver.AUTHOR, "creditos": ver.CREDITS,
-        "contacto": {"whatsapp": ver.CONTACT_WHATSAPP, "correo": ver.CONTACT_EMAIL}, "hora": db.now_str()})
+        "powered_by": ver.POWERED_BY,
+        "contacto": {"telegram": ver.CONTACT_TELEGRAM, "telegram_url": ver.CONTACT_TELEGRAM_URL,
+                     "correo": ver.CONTACT_EMAIL, "correo_url": ver.CONTACT_EMAIL_URL}, "hora": db.now_str()})
 
 
 # --------------------------------------------------------------------------- auth

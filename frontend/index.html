@@ -59,6 +59,8 @@ h1,h2,h3{margin:0}
 .login .err{color:#ff6a7c;font-size:13px;min-height:18px}
 .login .foot{font-size:12px;color:#7d86a0;text-align:center;line-height:1.6}
 .login .foot b{color:#aab4cf;font-weight:600}
+.powered{font-size:10.5px;letter-spacing:.04em;opacity:.75;margin-top:1px}
+#modalContacto a.v{display:block;text-decoration:none;cursor:pointer}#modalContacto a.v:hover{color:#ff6b7d;text-decoration:underline}
 
 /* ---- estructura ---- */
 #app{display:grid;grid-template-columns:224px 1fr;height:100vh}
@@ -321,7 +323,7 @@ table.tbl{width:100%;border-collapse:collapse}
       <button class="btn pri big" type="submit" style="width:100%">Ingresar</button>
     </form>
   </div>
-  <div class="foot"><b>Versión <span class="ver"></span></b><br>Desarrollado por <b class="autor"></b></div>
+  <div class="foot"><b>Versión <span class="ver"></span></b><br>Desarrollado por <b class="autor"></b><div class="powered"></div></div>
 </div>
 
 <!-- APP -->
@@ -329,7 +331,7 @@ table.tbl{width:100%;border-collapse:collapse}
   <aside class="side">
     <div class="brand"><img src="/assets/icon.png" alt=""><div class="nm">Antare<span class="x">X</span>ales<small>POS</small></div></div>
     <nav id="nav"></nav>
-    <div class="foot"><div class="tasa">Tasa BCV<b id="footTasa"></b></div><div class="cred"><b>Versión <span class="ver"></span></b><br>Desarrollado por<br><b class="autor"></b></div></div>
+    <div class="foot"><div class="tasa">Tasa BCV<b id="footTasa"></b></div><div class="cred"><b>Versión <span class="ver"></span></b><br>Desarrollado por<br><b class="autor"></b><div class="powered"></div></div></div>
   </aside>
   <div class="main">
     <header class="top">
@@ -579,7 +581,7 @@ table.tbl{width:100%;border-collapse:collapse}
           <div class="mfoot"><button class="btn pri" type="submit">Guardar configuración</button></div>
         </form>
         <div class="card sec about" style="max-width:720px;margin-top:16px"><img src="/assets/icon.png" alt="">
-          <div><div class="t">Antare<span class="x">X</span>ales POS</div><div class="muted">Versión <b class="ver"></b></div><div class="hint">Desarrollado por <span class="autor"></span></div></div></div>
+          <div><div class="t">Antare<span class="x">X</span>ales POS</div><div class="muted">Versión <b class="ver"></b></div><div class="hint">Desarrollado por <span class="autor"></span><div class="powered"></div></div></div></div>
       </section>
 
     </main>
@@ -615,8 +617,8 @@ table.tbl{width:100%;border-collapse:collapse}
 <div id="modalContacto" class="mback" role="dialog" aria-modal="true" aria-label="Información de contacto"><div class="cbox">
   <img src="/assets/lord_scorpiox.png" alt="Lord ScorpioX - Computer Technician">
   <h3>Información de Contacto</h3>
-  <div class="row"><div class="grow"><div class="k">Whatsapp</div><div class="v" id="ctWhatsapp"></div></div><button type="button" data-act="copiar" data-from="ctWhatsapp">Copiar</button></div>
-  <div class="row"><div class="grow"><div class="k">Correo</div><div class="v" id="ctCorreo"></div></div><button type="button" data-act="copiar" data-from="ctCorreo">Copiar</button></div>
+  <div class="row"><div class="grow"><div class="k">Telegram</div><a class="v" id="ctTelegram" data-ext href="https://t.me/lordscorpiox" target="_blank" rel="noopener" title="Abrir Telegram"></a></div><button type="button" data-act="copiar" data-from="ctTelegram">Copiar</button></div>
+  <div class="row"><div class="grow"><div class="k">Correo</div><a class="v" id="ctCorreo" data-ext href="mailto:lord.scorpiox@gmail.com" title="Escribir un correo"></a></div><button type="button" data-act="copiar" data-from="ctCorreo">Copiar</button></div>
   <button type="button" class="cerrar" data-act="cerrarContacto">Cerrar</button>
   <div class="pie">AntareXales POS · Versión <span class="ver-n"></span></div>
 </div></div>
@@ -2744,10 +2746,18 @@ document.addEventListener("change", e => {
 function pintarAutor(autor) {
   const nombre = "Lord Scorpiox", html = esc(autor).replace(nombre, `<button type="button" class="dev" data-act="contacto" title="Información de contacto">${nombre}</button>`);
   $$(".autor").forEach(e => { e.innerHTML = html; });
+  $$(".powered").forEach(e => { e.textContent = (S.info && S.info.powered_by) || "Powered by Claude AI"; });
 }
+/* Telegram y correo: dentro de la app se abren fuera de la ventana (aplicación o navegador predeterminado); en un navegador normal, el enlace funciona solo. */
+document.addEventListener("click", e => {
+  const a = e.target.closest("a[data-ext]"); if (!a) return;
+  const api = window.pywebview && window.pywebview.api;
+  if (api && api.abrir_externo) { e.preventDefault(); api.abrir_externo(a.href).then(r => { if (r && !r.ok) toast("No se pudo abrir el enlace", "warn"); }); }
+});
 function abrirContacto() {
-  const c = (S.info && S.info.contacto) || {whatsapp: "04248556438", correo: "scorpiox22@gmail.com"};
-  $("#ctWhatsapp").textContent = c.whatsapp; $("#ctCorreo").textContent = c.correo;
+  const c = (S.info && S.info.contacto) || {telegram: "@lordscorpiox", telegram_url: "https://t.me/lordscorpiox", correo: "lord.scorpiox@gmail.com", correo_url: "mailto:lord.scorpiox@gmail.com"};
+  const tg = $("#ctTelegram"), cr = $("#ctCorreo");
+  tg.textContent = c.telegram; tg.href = c.telegram_url; cr.textContent = c.correo; cr.href = c.correo_url;
   $$(".ver-n").forEach(e => { e.textContent = (S.info && S.info.version) || ""; });
   $("#modalContacto").classList.add("open");
   const b = $("#modalContacto .cerrar"); if (b) b.focus();
