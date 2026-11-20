@@ -79,6 +79,11 @@ jobs:
           print("ping OK, versión", j["version"])
           PY
 
+      - name: Pruebas automáticas de la API
+        env:
+          PYTHONUTF8: "1"
+        run: bash tests/run_all.sh
+
       - name: Compilar con PyInstaller
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed \
@@ -87,7 +92,7 @@ jobs:
             --add-data "frontend;frontend" \
             --add-data "assets;assets" \
             --hidden-import stock --hidden-import errors --hidden-import inventario \
-            --hidden-import caja --hidden-import compras --hidden-import respaldo --hidden-import actualizador \
+            --hidden-import caja --hidden-import compras --hidden-import respaldo --hidden-import actualizador --hidden-import fiscal \
             --collect-all webview \
             main.py
 

@@ -514,6 +514,21 @@ DEFAULT_CONFIG = {
     "actualizar_al_abrir": "1",   # v0.8: buscar actualizaciones al abrir (solo administrador)
     "caja_obligatoria": "0",
     "dias_alerta_vencimiento": "30",
+    # v0.11: modo fiscal (DESACTIVADO por defecto; todo es configurable, ver fiscal.py)
+    "fiscal_activo": "0",
+    "fiscal_razon_social": "",
+    "iva_pct_reducida": "8",
+    "iva_pct_adicional": "15",     # se suma a la general (bienes de lujo)
+    "igtf_activo": "0",
+    "igtf_pct": "3",
+    "igtf_metodos": "efectivo_usd,zelle",
+    "control_modo": "manual",      # manual: se escribe al facturar | serie: numeración propia dentro de un rango
+    "control_obligatorio": "1",
+    "control_prefijo": "00-",
+    "control_digitos": "8",
+    "sig_control": "1",
+    "control_hasta": "0",          # 0 = sin tope
+    "fiscal_exige_cliente": "0",
 }
 
 # Columnas agregadas después de la primera versión: (tabla, columna, definición).
@@ -561,6 +576,21 @@ MIGRACIONES = [
     ("ventas", "vuelto_en", "TEXT NOT NULL DEFAULT ''"),
     ("abonos", "turno_id", "INTEGER"),
     ("usuarios", "debe_cambiar", "INTEGER NOT NULL DEFAULT 0"),
+    # v0.11: alícuota por producto, IGTF y datos fiscales del documento
+    ("productos", "iva_alicuota", "TEXT NOT NULL DEFAULT ''"),
+    ("ventas", "igtf_pct", "REAL NOT NULL DEFAULT 0"),
+    ("ventas", "igtf_base_usd", "REAL NOT NULL DEFAULT 0"),
+    ("ventas", "igtf_usd", "REAL NOT NULL DEFAULT 0"),
+    ("ventas", "igtf_bs", "REAL NOT NULL DEFAULT 0"),
+    ("documentos", "igtf_pct", "REAL NOT NULL DEFAULT 0"),
+    ("documentos", "igtf_base_usd", "REAL NOT NULL DEFAULT 0"),
+    ("documentos", "igtf_usd", "REAL NOT NULL DEFAULT 0"),
+    ("documentos", "igtf_bs", "REAL NOT NULL DEFAULT 0"),
+    ("documentos", "fiscal", "INTEGER NOT NULL DEFAULT 0"),
+    ("documentos", "emisor_nombre", "TEXT NOT NULL DEFAULT ''"),
+    ("documentos", "emisor_rif", "TEXT NOT NULL DEFAULT ''"),
+    ("documentos", "emisor_direccion", "TEXT NOT NULL DEFAULT ''"),
+    ("documentos", "emisor_telefono", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

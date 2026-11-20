@@ -144,6 +144,11 @@ table.tbl{width:100%;border-collapse:collapse}
 .fisc{font-size:12px;color:var(--muted);display:grid;gap:1px;padding:0 3px 6px}
 .fisc div{display:flex;justify-content:space-between;gap:10px}
 .fisc b{color:var(--text);font-weight:700}
+.fisc.igtf{border-top:1px dashed var(--line);padding-top:6px;margin-top:2px}
+.fpaso{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:8px;background:var(--card2);box-shadow:inset 0 0 0 1px var(--line);font-size:13px}
+.fpaso .ic{font-weight:800;min-width:18px}.fpaso.ok .ic{color:var(--ok)}.fpaso.no .ic{color:var(--danger)}.fpaso.op .ic{color:var(--muted)}
+.fpaso small{display:block;color:var(--muted)}.fpaso .btn{margin-left:auto}
+#fiscalPasos{display:grid;gap:6px}
 .acc .btn.ghost{flex:none}
 /* documentos (factura, proforma, nota de entrega): hoja blanca para imprimir */
 .doc{font-size:12px;position:relative;color:#000}
@@ -435,6 +440,7 @@ table.tbl{width:100%;border-collapse:collapse}
           <div id="vAviso" class="aviso" hidden>La tasa BCV está en 1. Actualícela antes de vender.</div>
           <div id="vCart" class="cart"></div>
           <div id="vFiscal" class="fisc" hidden></div>
+          <div id="vIgtf" class="fisc igtf" hidden></div>
           <div class="tot main-tot"><span>TOTAL USD</span><span id="vTotUsd">$0,00</span></div>
           <div class="tot main-tot" style="font-size:18px"><span>TOTAL Bs</span><span id="vTotBs">Bs 0,00</span></div>
           <div class="metodos" id="vMetodos"></div>
@@ -597,6 +603,7 @@ table.tbl{width:100%;border-collapse:collapse}
           <button type="button" role="tab" data-act="cfgTab" data-t="general" class="on">General</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="ventas">Ventas e inventario</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="impuestos">Impuestos y documentos</button>
+          <button type="button" role="tab" data-act="cfgTab" data-t="fiscal" id="cfgTabFiscal">Fiscal</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="actualizaciones">Actualizaciones</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="acerca">Acerca de</button>
         </div>
@@ -640,7 +647,10 @@ table.tbl{width:100%;border-collapse:collapse}
             <div class="field"><label>Cómo se aplica</label><select name="iva_modo"><option value="incluido">Los precios ya incluyen IVA</option><option value="adicional">El IVA se suma al precio</option></select>
               <div class="hint">«Incluido»: el cliente paga lo mismo y el IVA se discrimina en tickets y facturas. «Se suma»: el precio es sin IVA.</div></div>
           </div>
-          <div class="hint" style="margin-top:-6px">Con el IVA activo, cada producto puede marcarse como «Exento de IVA» en su ficha.</div>
+          <div class="grid2">
+            <div class="field"><label>Alícuota reducida (%)</label><input name="iva_pct_reducida" type="number" step="any" min="0" max="100"></div>
+            <div class="field"><label>Alícuota adicional (%)</label><input name="iva_pct_adicional" type="number" step="any" min="0" max="100"><div class="hint">Se suma a la general (bienes de lujo: 16 % + 15 % = 31 %).</div></div></div>
+          <div class="hint" style="margin-top:-6px">Con el IVA activo, cada producto elige su alícuota (general, reducida, adicional o exento) en su ficha. Los porcentajes son parámetros: confírmelos con su contador.</div>
           <h3 class="sec-h">Documentos (facturas, proformas y notas de entrega)</h3>
           <div class="grid3">
             <div class="field"><label>Próxima factura Nº</label><input name="sig_factura" type="number" min="1" step="1"></div>
@@ -649,6 +659,27 @@ table.tbl{width:100%;border-collapse:collapse}
           <div class="grid2">
             <div class="field"><label>Validez de la proforma (días)</label><input name="proforma_validez" type="number" min="1" max="365" step="1"></div>
             <div class="field"><label>Texto al pie de los documentos</label><input name="doc_pie" placeholder="Condiciones de pago, datos bancarios…"></div></div>
+          </div>
+          <div class="tabp" data-tabp="fiscal" hidden>
+          <h3>Modo fiscal</h3>
+          <div class="hint">Desactivado por defecto. Al activarlo, las facturas llevan los datos fiscales del comercio, el número de control, el IVA por alícuota y, si lo configura, el IGTF. Es una herramienta de apoyo: valide con su contador qué le corresponde.</div>
+          <div id="fiscalPasos"></div>
+          <label class="chk"><input type="checkbox" name="fiscal_activo"> Activar el modo fiscal</label>
+          <div class="field"><label>Razón social</label><input name="fiscal_razon_social" maxlength="120" placeholder="Tal como figura en el RIF"><div class="hint">El RIF y el domicilio fiscal se escriben en la pestaña General.</div></div>
+          <h3 class="sec-h">Número de control de las facturas</h3>
+          <div class="grid2">
+            <div class="field"><label>Cómo se asigna</label><select name="control_modo"><option value="manual">Se escribe al facturar (imprenta digital / máquina fiscal)</option><option value="serie">Serie propia dentro de un rango autorizado</option></select></div>
+            <label class="chk" style="align-self:end"><input type="checkbox" name="control_obligatorio"> Exigir el número de control al facturar</label></div>
+          <div class="grid2" id="cfgSerie">
+            <div class="field"><label>Prefijo</label><input name="control_prefijo" maxlength="10"></div>
+            <div class="field"><label>Dígitos</label><input name="control_digitos" type="number" min="1" max="12" step="1"></div>
+            <div class="field"><label>Próximo número</label><input name="sig_control" type="number" min="1" step="1"></div>
+            <div class="field"><label>Último número autorizado (0 = sin tope)</label><input name="control_hasta" type="number" min="0" step="1"></div></div>
+          <label class="chk"><input type="checkbox" name="fiscal_exige_cliente"> Exigir nombre y RIF / cédula del cliente en cada factura</label>
+          <h3 class="sec-h">IGTF (pagos en divisas)</h3>
+          <label class="chk"><input type="checkbox" name="igtf_activo"> Cobrar IGTF sobre lo pagado en divisas</label>
+          <div class="grid2"><div class="field"><label>Alícuota IGTF (%)</label><input name="igtf_pct" type="number" step="any" min="0" max="100"><div class="hint">Confirme el porcentaje vigente con su contador.</div></div>
+            <div class="field"><label>Métodos de pago sujetos a IGTF</label><div id="igtfMetodos" style="display:grid;gap:4px"></div></div></div>
           </div>
           <div class="tabp" data-tabp="actualizaciones" hidden>
           <h3>Actualizaciones</h3>
@@ -765,16 +796,37 @@ const ivaCfg = () => {
   const pct = parseFloat(S.config.iva_pct) || 0;
   return pct > 0 ? {pct, modo: S.config.iva_modo === "adicional" ? "adicional" : "incluido"} : {pct: 0, modo: ""};
 };
+function selAlicuota(p) {
+  const t = tasasIva(), act = alicDe(p);
+  return ["general", "reducida", "adicional", "exento"].map(a =>
+    `<option value="${a}" ${act === a ? "selected" : ""}>${ALIC_NOMBRE[a]}${a === "exento" ? "" : " (" + nf2.format(t[a]) + "%)"}</option>`).join("");
+}
+/* Alícuotas por producto (v0.11): general / reducida / adicional (se suma a la general) / exento. Igual que fiscal.py. */
+const tasasIva = () => {
+  const g = parseFloat(S.config.iva_pct) || 0;
+  return {general: g, reducida: parseFloat(S.config.iva_pct_reducida) || 0, adicional: g + (parseFloat(S.config.iva_pct_adicional) || 0), exento: 0};
+};
+const alicDe = p => !p ? "general" : (p.iva_exento || p.iva_alicuota === "exento") ? "exento" : (p.iva_alicuota === "reducida" || p.iva_alicuota === "adicional") ? p.iva_alicuota : "general";
+const ALIC_NOMBRE = {general: "General", reducida: "Reducida", adicional: "Adicional (lujo)", exento: "Exento"};
+const fiscalOn = () => !!S.config && S.config.fiscal_activo === "1";
+/* IGTF: % sobre lo pagado en divisas, solo con el modo fiscal activo. */
+const igtfCfg = () => {
+  const c = S.config || {};
+  if (c.fiscal_activo !== "1" || c.igtf_activo !== "1") return {pct: 0, metodos: new Set()};
+  const pct = parseFloat(c.igtf_pct) || 0, m = new Set(String(c.igtf_metodos || "").split(",").filter(Boolean));
+  return pct > 0 && m.size ? {pct, metodos: m} : {pct: 0, metodos: new Set()};
+};
 function lineaCalc(i) {
-  const p = S.prodMap.get(i.id), {pct, modo} = ivaCfg();
-  const exento = pct > 0 && !!(p && p.iva_exento), gravado = pct > 0 && !exento, adic = gravado && modo === "adicional";
+  const p = S.prodMap.get(i.id), base = ivaCfg(), modo = base.modo, alic = alicDe(p);
+  const exento = base.pct > 0 && alic === "exento", pct = base.pct > 0 && !exento ? tasasIva()[alic] : 0;
+  const gravado = pct > 0, adic = gravado && modo === "adicional";
   const ivaDe = imp => !gravado ? 0 : adic ? r2(imp * pct / 100) : r2(imp - r2(imp / (1 + pct / 100)));
   if (esBs(p)) {
     const imp = r2(i.cantidad * p.precio_bs), ivaBs = ivaDe(imp), bs = adic ? r2(imp + ivaBs) : imp;
-    return {usd: r2(bs / S.tasa), bs, ivaUsd: r2(ivaBs / S.tasa), ivaBs, exento, gravado, fijo: true};
+    return {usd: r2(bs / S.tasa), bs, ivaUsd: r2(ivaBs / S.tasa), ivaBs, exento, gravado, fijo: true, pct};
   }
   const sub = r2(i.cantidad * (p ? p.precio_usd : 0)), ivaUsd = ivaDe(sub), usd_ = adic ? r2(sub + ivaUsd) : sub;
-  return {usd: usd_, bs: r2(usd_ * S.tasa), ivaUsd, ivaBs: r2(ivaUsd * S.tasa), exento, gravado, fijo: false};
+  return {usd: usd_, bs: r2(usd_ * S.tasa), ivaUsd, ivaBs: r2(ivaUsd * S.tasa), exento, gravado, fijo: false, pct};
 }
 const totalBs = () => r2(S.carrito.reduce((a, i) => a + lineaCalc(i).bs, 0));
 function resumenFiscal() {
@@ -782,6 +834,9 @@ function resumenFiscal() {
   const sum = (k, f = () => true) => r2(ls.filter(f).reduce((a, l) => a + l[k], 0));
   const t = {pct, modo, usd: sum("usd"), bs: sum("bs"), ivaUsd: sum("ivaUsd"), ivaBs: sum("ivaBs"), exUsd: sum("usd", l => l.exento), exBs: sum("bs", l => l.exento)};
   t.baseUsd = r2(t.usd - t.ivaUsd - t.exUsd); t.baseBs = r2(t.bs - t.ivaBs - t.exBs);
+  const g = new Map();
+  for (const l of ls) if (l.gravado) { const x = g.get(l.pct) || {pct: l.pct, ivaUsd: 0, ivaBs: 0}; x.ivaUsd += l.ivaUsd; x.ivaBs += l.ivaBs; g.set(l.pct, x); }
+  t.grupos = [...g.values()].sort((a, b) => a.pct - b.pct).map(x => ({pct: x.pct, ivaUsd: r2(x.ivaUsd), ivaBs: r2(x.ivaBs)}));
   return t;
 }
 const r2 = x => Math.round((x + 1e-9) * 100) / 100;
@@ -1176,12 +1231,17 @@ function calcPago() {
   const total = totalUsd(), totalB = totalBs();
   const pagado = S.pagos.reduce((a, p) => a + (METODOS[p.metodo][1] === "USD" ? (+p.monto || 0) : (+p.monto || 0) / S.tasa), 0);
   const pagadoBs = S.pagos.reduce((a, p) => a + (METODOS[p.metodo][1] === "USD" ? (+p.monto || 0) * S.tasa : (+p.monto || 0)), 0);
+  // IGTF (solo modo fiscal): se cobra además del total, sobre la parte de la factura pagada en divisas. Igual que fiscal.calcular_igtf.
+  const ig = igtfCfg(), k = ig.pct / 100;
+  const recDiv = S.pagos.reduce((a, p) => a + (ig.metodos.has(p.metodo) ? (+p.monto || 0) : 0), 0);
+  const igtfBase = k > 0 && recDiv > 0 ? Math.min(recDiv / (1 + k), Math.max(0, total - (pagado - recDiv))) : 0;
+  const igtf = r2(igtfBase * k), aCobrar = r2(total + igtf), igtfBs = r2(igtf * S.tasa);
   // Si todo se paga en Bs, el cuadre se hace en Bs (exacto): pasar por USD a centavos desviaba el vuelto varios Bs (1.500 − 1.100 ≠ 400).
   const soloBs = S.pagos.length > 0 && S.pagos.every(p => METODOS[p.metodo][1] === "BS");
   const tol = soloBs ? (0.05 + 0.01 * S.carrito.length) / S.tasa : TOL;
-  const restanteBs = totalB - pagadoBs;
-  const restante = soloBs ? restanteBs / S.tasa : total - pagado;
-  return {total, pagado, restante, restanteBs, tol, soloBs, vueltoBs: Math.max(0, -restanteBs),
+  const restanteBs = totalB + igtfBs - pagadoBs;
+  const restante = soloBs ? restanteBs / S.tasa : aCobrar - pagado;
+  return {total, pagado, restante, restanteBs, tol, soloBs, vueltoBs: Math.max(0, -restanteBs), igtf, igtfBase, igtfBs, aCobrar, igtfPct: ig.pct,
           hayEfectivo: S.pagos.some(p => p.metodo.startsWith("efectivo") && +p.monto > 0)};
 }
 function actualizarTotales() {
@@ -1192,12 +1252,19 @@ function actualizarTotales() {
     fe.hidden = false;
     fe.innerHTML = `<div><span>Base imponible</span><b>${usd(f.baseUsd)} · ${bsf(f.baseBs)}</b></div>` +
       (f.exUsd > 0 || f.exBs > 0 ? `<div><span>Exento</span><b>${usd(f.exUsd)} · ${bsf(f.exBs)}</b></div>` : "") +
-      `<div><span>IVA ${nf2.format(f.pct)}%${f.modo === "incluido" ? " (incluido)" : ""}</span><b>${usd(f.ivaUsd)} · ${bsf(f.ivaBs)}</b></div>`;
+      (f.grupos.length ? f.grupos : [{pct: f.pct, ivaUsd: f.ivaUsd, ivaBs: f.ivaBs}]).map(x =>
+        `<div><span>IVA ${nf2.format(x.pct)}%${f.modo === "incluido" ? " (incluido)" : ""}</span><b>${usd(x.ivaUsd)} · ${bsf(x.ivaBs)}</b></div>`).join("");
   } else fe.hidden = true;
   actualizarResumenPago();
 }
 function actualizarResumenPago() {
-  const {total, pagado, restante, restanteBs, tol, hayEfectivo} = calcPago();
+  const {total, pagado, restante, restanteBs, tol, hayEfectivo, igtf, igtfBase, igtfBs, aCobrar, igtfPct} = calcPago();
+  const ie = $("#vIgtf");
+  if (igtf > 0 && S.carrito.length) {
+    ie.hidden = false;
+    ie.innerHTML = `<div><span>IGTF ${nf2.format(igtfPct)}% sobre ${usd(igtfBase)}</span><b>${usd(igtf)} · ${bsf(igtfBs)}</b></div>` +
+      `<div><span>A cobrar (con IGTF)</span><b>${usd(aCobrar)} · ${bsf(r2(aCobrar * S.tasa))}</b></div>`;
+  } else ie.hidden = true;
   const el = $("#vResumen"); let cls = "resumen", txt, puede = S.carrito.length > 0;
   if (!S.carrito.length) txt = "Agregue productos al carrito";
   else if (restante > tol) {
@@ -1227,7 +1294,8 @@ function addPago(m) {
   let idx = S.pagos.findIndex(p => p.metodo === m);
   if (idx < 0) {
     const cp = calcPago();
-    const monto = METODOS[m][1] === "USD" ? r2(Math.max(0, cp.restante)) : r2(Math.max(0, cp.restanteBs));
+    const kk = igtfCfg(), conIgtf = kk.metodos.has(m) ? 1 + kk.pct / 100 : 1;   // lo entregado en divisas incluye el IGTF
+    const monto = METODOS[m][1] === "USD" ? r2(Math.max(0, cp.restante) * conIgtf) : r2(Math.max(0, cp.restanteBs));
     S.pagos.push({metodo: m, monto: monto || ""}); idx = S.pagos.length - 1;
     renderPagos();
   }
@@ -1277,6 +1345,14 @@ const cobrar = safe(async () => {
 });
 
 /* ============================== ticket ============================== */
+/* IVA agrupado por alícuota a partir de las líneas (ticket y documentos). */
+function ivaPorAlicuota(items) {
+  const g = new Map();
+  for (const i of items || []) if (!i.exento && i.iva_pct > 0) {
+    const x = g.get(i.iva_pct) || {pct: i.iva_pct, ivaUsd: 0, ivaBs: 0}; x.ivaUsd += i.iva_usd; x.ivaBs += i.iva_bs; g.set(i.iva_pct, x);
+  }
+  return [...g.values()].sort((a, b) => a.pct - b.pct).map(x => ({pct: x.pct, ivaUsd: r2(x.ivaUsd), ivaBs: r2(x.ivaBs)}));
+}
 function ticketHtml(v) {
   const c = S.config, num = String(v.id).padStart(6, "0");
   const lineas = v.items.map(i => {
@@ -1297,9 +1373,13 @@ function ticketHtml(v) {
     <hr>${lineas}<hr>
     ${v.iva_modo ? `<div class="ln"><span>Base imponible</span><span>${usd(v.base_usd)} / ${bsf(v.base_bs)}</span></div>
     ${v.exento_usd > 0 || v.exento_bs > 0 ? `<div class="ln"><span>Exento</span><span>${usd(v.exento_usd)} / ${bsf(v.exento_bs)}</span></div>` : ""}
-    <div class="ln"><span>IVA ${nf2.format(v.iva_pct)}%${v.iva_modo === "incluido" ? " (incl.)" : ""}</span><span>${usd(v.iva_usd)} / ${bsf(v.iva_bs)}</span></div>` : ""}
+    ${ivaPorAlicuota(v.items).map(x => `<div class="ln"><span>IVA ${nf2.format(x.pct)}%${v.iva_modo === "incluido" ? " (incl.)" : ""}</span><span>${usd(x.ivaUsd)} / ${bsf(x.ivaBs)}</span></div>`).join("") ||
+      `<div class="ln"><span>IVA ${nf2.format(v.iva_pct)}%${v.iva_modo === "incluido" ? " (incl.)" : ""}</span><span>${usd(v.iva_usd)} / ${bsf(v.iva_bs)}</span></div>`}` : ""}
     <div class="ln tt"><span>TOTAL USD</span><span>${usd(v.total_usd)}</span></div>
     <div class="ln tt"><span>TOTAL Bs</span><span>${bsf(v.total_bs)}</span></div>
+    ${v.igtf_usd > 0 ? `<div class="ln"><span>IGTF ${nf2.format(v.igtf_pct)}% s/ ${usd(v.igtf_base_usd)}</span><span>${usd(v.igtf_usd)} / ${bsf(v.igtf_bs)}</span></div>
+    <div class="ln tt"><span>TOTAL A PAGAR</span><span>${usd(r2(v.total_usd + v.igtf_usd))}</span></div>
+    <div class="ln tt"><span>TOTAL A PAGAR Bs</span><span>${bsf(r2(v.total_bs + v.igtf_bs))}</span></div>` : ""}
     <div class="ln"><span>Tasa BCV</span><span>${nf2.format(v.tasa)} Bs/USD</span></div>
     <hr>${pagos || "<div>Sin pagos (crédito)</div>"}
     ${v.vuelto_usd > TOL || v.vuelto_bs > 0.005 ? `<div class="ln"><b>Vuelto</b><b>${usd(v.vuelto_usd)} / ${bsf(v.vuelto_bs)}</b></div>${v.vuelto_en ? `<div class="ln"><span>Entregado en</span><span>${v.vuelto_en === "BS" ? bsf(v.vuelto_bs) : usd(v.vuelto_usd)}</span></div>` : ""}` : ""}
@@ -1408,7 +1488,7 @@ function formProducto(p) {
     <div id="gUsd">${grupoUsd}</div>
     <div id="gBs" hidden>${grupoBs}</div>
     <div class="calc" id="calcProd"></div>
-    ${S.config.iva_activo === "1" ? `<label class="chk"><input type="checkbox" name="iva_exento" ${p && p.iva_exento ? "checked" : ""}> Exento de IVA (este producto no lleva IVA)</label>` : ""}
+    ${S.config.iva_activo === "1" ? `<div class="field"><label>Alícuota de IVA</label><select name="iva_alicuota">${selAlicuota(p)}</select></div>` : ""}
     <div class="grid2">
       <div class="field"><label>${p ? "Stock actual" : "Stock inicial"}<span class="lblU"></span></label><input name="stock" type="number" step="any" min="0" value="${p ? p.stock : 0}" ${p ? "disabled" : ""}></div>
       <div class="field"><label>Stock mínimo<span class="lblU"></span></label><input name="stock_minimo" type="number" step="any" min="0" value="${p ? p.stock_minimo : 0}"></div></div>
@@ -1601,6 +1681,7 @@ const cargarDocumentos = safe(async () => {
 function docHtml(d) {
   const c = S.config, conPrecios = d.tipo !== "nota_entrega" || d.mostrar_precios === 1, iva = !!d.iva_modo;
   const f2 = n => nf2.format(n || 0);
+  const emi = d.fiscal ? {rif: d.emisor_rif, direccion: d.emisor_direccion, telefono: d.emisor_telefono} : {rif: c.rif, direccion: c.direccion, telefono: c.telefono};
   const filas = d.items.map(i => {
     const u = i.unidad && i.unidad !== "und" ? " " + i.unidad : "", ex = iva && i.exento ? " <b>(E)</b>" : "";
     return conPrecios
@@ -1612,7 +1693,10 @@ function docHtml(d) {
   let tot = "";
   if (conPrecios) {
     const fila = (t, bs, us, cls = "") => `<tr class="${cls}"><td>${t}</td><td class="r">${bsf(bs)}</td><td class="r">${usd(us)}</td></tr>`;
-    tot = `<table class="tots">${iva ? fila("Base imponible", d.base_bs, d.base_usd) + (d.exento_usd > 0 || d.exento_bs > 0 ? fila("Monto exento (E)", d.exento_bs, d.exento_usd) : "") + fila(`IVA ${f2(d.iva_pct)}%`, d.iva_bs, d.iva_usd) : ""}${fila("TOTAL", d.total_bs, d.total_usd, "tt")}</table>
+    const grupos = ivaPorAlicuota(d.items), conIgtf = d.igtf_usd > 0;
+    tot = `<table class="tots">${iva ? fila("Base imponible", d.base_bs, d.base_usd) + (d.exento_usd > 0 || d.exento_bs > 0 ? fila("Monto exento (E)", d.exento_bs, d.exento_usd) : "") +
+      (grupos.length ? grupos : [{pct: d.iva_pct, ivaBs: d.iva_bs, ivaUsd: d.iva_usd}]).map(x => fila(`IVA ${f2(x.pct)}%`, x.ivaBs, x.ivaUsd)).join("") : ""}${fila(conIgtf ? "TOTAL FACTURA" : "TOTAL", d.total_bs, d.total_usd, conIgtf ? "" : "tt")}${
+      conIgtf ? fila(`IGTF ${f2(d.igtf_pct)}% sobre ${usd(d.igtf_base_usd)} pagados en divisas`, d.igtf_bs, d.igtf_usd) + fila("TOTAL A PAGAR", r2(d.total_bs + d.igtf_bs), r2(d.total_usd + d.igtf_usd), "tt") : ""}</table>
       <div class="small" style="text-align:right;margin-top:3px">Tasa BCV: ${f2(d.tasa)} Bs/USD${iva ? " · Precios unitarios y totales por línea sin IVA" : ""}</div>`;
   }
   const meta = [`<div class="nro">Nº ${docNum(d)}</div>`];
@@ -1622,8 +1706,8 @@ function docHtml(d) {
   if (d.venta_id) meta.push(`<div class="small">Venta #${d.venta_id}</div>`);
   return `<div class="paper doc">
     ${d.estado === "anulado" ? '<div class="anul">ANULADO</div>' : ""}
-    <div class="dh"><div class="biz">${c.logo ? `<img src="${esc(c.logo)}" alt="">` : ""}<div><h2>${esc(c.negocio_nombre)}</h2>
-        ${c.rif ? `<div>RIF: ${esc(c.rif)}</div>` : ""}${c.direccion ? `<div>${esc(c.direccion)}</div>` : ""}${c.telefono ? `<div>Tel: ${esc(c.telefono)}</div>` : ""}</div></div>
+    <div class="dh"><div class="biz">${c.logo ? `<img src="${esc(c.logo)}" alt="">` : ""}<div><h2>${esc(d.fiscal ? d.emisor_nombre : c.negocio_nombre)}</h2>
+        ${emi.rif ? `<div>RIF: ${esc(emi.rif)}</div>` : ""}${emi.direccion ? `<div>${esc(emi.direccion)}</div>` : ""}${emi.telefono ? `<div>Tel: ${esc(emi.telefono)}</div>` : ""}</div></div>
       <div class="dt"><div class="tit">${DOC_TIPOS[d.tipo][1]}</div>${meta.join("")}</div></div>
     <div class="cli"><div><b>Cliente:</b> ${esc(d.cli_nombre)}</div><div><b>RIF / C.I.:</b> ${esc(d.cli_rif) || "—"}</div>
       <div class="f"><b>Dirección:</b> ${esc(d.cli_direccion) || "—"}</div>${d.cli_telefono ? `<div><b>Teléfono:</b> ${esc(d.cli_telefono)}</div>` : ""}</div>
@@ -1646,7 +1730,9 @@ const docDeVenta = safe(async (tipo, id) => {
 function formDocumento(tipo, ctx) {
   const venta = ctx.venta || null;
   const c = venta ? (venta.cliente_id ? S.cliMap.get(venta.cliente_id) : null) : (S.clienteSel ? S.cliMap.get(S.clienteSel) : null);
-  const extra = tipo === "factura" ? `<div class="field"><label>Nº de control (opcional)</label><input name="control" placeholder="Si usa talonario o imprenta autorizada"></div>`
+  const serie = fiscalOn() && S.config.control_modo === "serie", obl = fiscalOn() && S.config.control_modo !== "serie" && S.config.control_obligatorio !== "0";
+  const extra = tipo === "factura" ? (serie ? `<div class="field"><label>Nº de control</label><input disabled value="Se asigna solo al generar (serie propia)"></div>`
+      : `<div class="field"><label>Nº de control${obl ? " *" : " (opcional)"}</label><input name="control" ${obl ? "required" : ""} placeholder="Lo asigna su imprenta digital o máquina fiscal"></div>`)
     : tipo === "proforma" ? `<div class="field"><label>Válida por (días)</label><input name="validez_dias" type="number" min="1" max="365" step="1" value="${esc(S.config.proforma_validez || "7")}"></div>`
     : `<label class="chk"><input type="checkbox" name="mostrar_precios"> Mostrar precios y totales en la nota</label>`;
   abrirModal(`<h3>${tipo === "factura" ? "Generar factura" : tipo === "proforma" ? "Generar proforma" : "Generar nota de entrega"}${venta ? ` · venta #${venta.id}` : ""}</h3>
@@ -1878,13 +1964,23 @@ const importarCsv = safe(async () => {
 });
 
 /* ============================== 8. CONFIGURACIÓN ============================== */
-const CFG_TABS = ["general", "ventas", "impuestos", "actualizaciones", "acerca"];
+const CFG_TABS = ["general", "ventas", "impuestos", "fiscal", "actualizaciones", "acerca"];
 function cfgTab(t) {
   if (!CFG_TABS.includes(t)) t = "general";
   S.cfgTab = t;
   $$("#cfgTabs button").forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
   $$("#cfgForm .tabp").forEach(p => { p.hidden = p.dataset.tabp !== t; });
   $("#cfgPie").hidden = t === "acerca";   // «Acerca de» no tiene nada que guardar
+}
+const FISCAL_IR = {razon: "fiscal", rif: "general", domicilio: "general", iva: "impuestos", control: "fiscal", igtf: "fiscal"};
+function pintarFiscal() {
+  $("#cfgTabFiscal").textContent = fiscalOn() ? "Fiscal ●" : "Fiscal";
+  api("GET", "/api/fiscal/estado").then(e => {
+    $("#fiscalPasos").innerHTML = e.pasos.map(p => `<div class="fpaso ${p.ok ? "ok" : p.obligatorio ? "no" : "op"}"><span class="ic">${p.ok ? "✓" : p.obligatorio ? "✕" : "○"}</span>
+      <div><b>${esc(p.titulo)}</b>${p.obligatorio ? "" : " <span class='muted'>(opcional)</span>"}${p.detalle ? `<small>${esc(p.detalle)}</small>` : ""}</div>
+      ${!p.ok ? `<button type="button" class="btn sm" data-act="cfgTab" data-t="${FISCAL_IR[p.id] || "fiscal"}">Ir</button>` : ""}</div>`).join("") +
+      `<div class="small ${e.listo ? "" : "muted"}">${e.listo ? (e.activo ? "Modo fiscal activo." : "Todo listo: ya puede activar el modo fiscal.") : "Complete los pasos marcados con ✕ y guarde para poder activarlo."}</div>`;
+  }).catch(() => {});
 }
 function initConfig() {
   const f = $("#v-config form"), c = S.config;
@@ -1894,7 +1990,15 @@ function initConfig() {
   f.elements.ganancia_default.value = c.ganancia_default ?? "30";
   f.elements.permitir_stock_negativo.checked = c.permitir_stock_negativo === "1";
   f.elements.iva_activo.checked = c.iva_activo === "1";
-  for (const k of ["iva_pct", "sig_factura", "sig_proforma", "sig_nota", "proforma_validez", "doc_pie"]) f.elements[k].value = c[k] ?? "";
+  for (const k of ["iva_pct", "iva_pct_reducida", "iva_pct_adicional", "sig_factura", "sig_proforma", "sig_nota", "proforma_validez", "doc_pie",
+    "fiscal_razon_social", "control_prefijo", "control_digitos", "sig_control", "control_hasta", "igtf_pct"]) f.elements[k].value = c[k] ?? "";
+  f.elements.control_modo.value = c.control_modo || "manual";
+  for (const k of ["fiscal_activo", "control_obligatorio", "fiscal_exige_cliente", "igtf_activo"]) f.elements[k].checked = c[k] === "1";
+  const igM = new Set(String(c.igtf_metodos || "").split(",").filter(Boolean));
+  $("#igtfMetodos").innerHTML = Object.entries(METODOS).filter(([, m]) => m[1] === "USD").map(([k, m]) =>
+    `<label class="chk"><input type="checkbox" data-igtf="${k}" ${igM.has(k) ? "checked" : ""}> ${esc(m[0])}</label>`).join("");
+  $("#cfgSerie").hidden = f.elements.control_modo.value !== "serie";
+  pintarFiscal();
   f.elements.iva_modo.value = c.iva_modo || "incluido";
   f.elements.caja_obligatoria.checked = c.caja_obligatoria === "1";
   f.elements.cajero_cambia_tasa.checked = c.cajero_cambia_tasa === "1";
@@ -1907,8 +2011,8 @@ function initConfig() {
   S.logoTmp = c.logo || ""; pintarLogo();
   // Los contadores de documentos avanzan en el servidor: se refrescan solo esos campos (sin tocar lo que el usuario esté editando).
   api("GET", "/api/config").then(n => {
-    S.config = Object.assign({}, S.config, {sig_factura: n.sig_factura, sig_proforma: n.sig_proforma, sig_nota: n.sig_nota});
-    if (S.vista === "config") for (const k of ["sig_factura", "sig_proforma", "sig_nota"]) if (document.activeElement !== f.elements[k]) f.elements[k].value = n[k];
+    S.config = Object.assign({}, S.config, {sig_factura: n.sig_factura, sig_proforma: n.sig_proforma, sig_nota: n.sig_nota, sig_control: n.sig_control});
+    if (S.vista === "config") for (const k of ["sig_factura", "sig_proforma", "sig_nota", "sig_control"]) if (document.activeElement !== f.elements[k]) f.elements[k].value = n[k];
   }).catch(() => {});
 }
 function pintarLogo() { const i = $("#cfgLogo"); i.hidden = !S.logoTmp; if (S.logoTmp) i.src = S.logoTmp; }
@@ -1998,7 +2102,7 @@ function formCombo(p) {
     <div class="grid2"><div class="field"><label>% de ganancia sobre el costo</label><input name="ganancia_pct" type="number" step="any" min="0" value="${pctDef}"></div>
       <div class="field"><label>Precio de venta USD *</label><input name="precio_usd" type="number" step="any" min="0" required value="${p ? p.precio_usd : ""}"></div></div>
     <div class="calc" id="comboCalc"></div>
-    ${S.config.iva_activo === "1" ? `<label class="chk"><input type="checkbox" name="iva_exento" ${p && p.iva_exento ? "checked" : ""}> Exento de IVA</label>` : ""}
+    ${S.config.iva_activo === "1" ? `<div class="field"><label>Alícuota de IVA</label><select name="iva_alicuota">${selAlicuota(p)}</select></div>` : ""}
     <div class="mfoot"><button type="button" class="btn" data-act="cerrarModal">Cancelar</button><button class="btn pri" type="submit">Guardar combo</button></div></form>`, true);
   S.prodEdit = p || null; S.imgTmp = undefined; pintarPrevImg(); calcCombo();
 }
@@ -2390,7 +2494,7 @@ const FORMS = {
       }
     }
     if (!id) { body.stock = d.stock; if (d.lote) body.lote = d.lote; if (d.vence) body.vence = d.vence; }
-    if (f.elements.iva_exento) body.iva_exento = f.elements.iva_exento.checked ? 1 : 0;   // la casilla solo existe con el IVA activo
+    if (f.elements.iva_alicuota) body.iva_alicuota = f.elements.iva_alicuota.value;   // el selector solo existe con el IVA activo
     if (S.imgTmp !== undefined) body.imagen = S.imgTmp || "";   // undefined = sin cambios; null = quitar
     await api(id ? "PUT" : "POST", id ? `/api/productos/${id}` : "/api/productos", body);
     cerrarModal(); await cargarProductos(); renderInventario(); toast("Producto guardado", "ok");
@@ -2417,7 +2521,7 @@ const FORMS = {
     const body = {tipo, cliente: {nombre: d.nombre, rif: d.rif, direccion: d.direccion, telefono: d.telefono}, notas: d.notas};
     if (f.dataset.cliente) body.cliente_id = +f.dataset.cliente;
     if (f.dataset.venta) body.venta_id = +f.dataset.venta;
-    if (tipo === "factura") body.control = d.control;
+    if (tipo === "factura" && d.control !== undefined) body.control = d.control;
     if (tipo === "proforma" && !tasaSincronizada()) return;
     if (tipo === "proforma") { body.validez_dias = d.validez_dias; body.tasa = S.tasa; body.items = S.carrito.map(i => ({producto_id: i.id, cantidad: i.cantidad})); }
     if (tipo === "nota_entrega") body.mostrar_precios = !!f.elements.mostrar_precios.checked;
@@ -2465,7 +2569,7 @@ const FORMS = {
     if (!comps.length) throw new Error("Agregue al menos un producto componente");
     const body = {nombre: d.nombre, codigo: d.codigo, categoria_id: d.categoria_id || null, precio_usd: d.precio_usd, ganancia_pct: d.ganancia_pct, componentes: comps};
     if (!id) body.tipo = "combo";
-    if (f.elements.iva_exento) body.iva_exento = f.elements.iva_exento.checked ? 1 : 0;
+    if (f.elements.iva_alicuota) body.iva_alicuota = f.elements.iva_alicuota.value;
     if (S.imgTmp !== undefined) body.imagen = S.imgTmp || "";
     await api(id ? "PUT" : "POST", id ? `/api/productos/${id}` : "/api/productos", body);
     cerrarModal(); await cargarProductos(); renderInventario(); toast("Combo guardado", "ok");
@@ -2538,7 +2642,15 @@ const FORMS = {
       almacen_ventas: d.almacen_ventas || "", dias_alerta_vencimiento: d.dias_alerta_vencimiento, caja_obligatoria: f.elements.caja_obligatoria.checked ? "1" : "0",
       cajero_cambia_tasa: f.elements.cajero_cambia_tasa.checked ? "1" : "0",
       actualizar_al_abrir: f.elements.actualizar_al_abrir.checked ? "1" : "0",
+      iva_pct_reducida: d.iva_pct_reducida, iva_pct_adicional: d.iva_pct_adicional,
+      fiscal_activo: f.elements.fiscal_activo.checked ? "1" : "0", fiscal_razon_social: d.fiscal_razon_social,
+      control_modo: d.control_modo, control_obligatorio: f.elements.control_obligatorio.checked ? "1" : "0",
+      control_prefijo: d.control_prefijo, control_digitos: d.control_digitos, sig_control: d.sig_control, control_hasta: d.control_hasta,
+      fiscal_exige_cliente: f.elements.fiscal_exige_cliente.checked ? "1" : "0",
+      igtf_activo: f.elements.igtf_activo.checked ? "1" : "0", igtf_pct: d.igtf_pct,
+      igtf_metodos: $$("#igtfMetodos [data-igtf]").filter(x => x.checked).map(x => x.dataset.igtf).join(","),
     });
+    pintarFiscal();
     await cargarProductos();
     S.tasa = parseFloat(S.config.tasa_bcv) || 1; actualizarTasaUI(); sessionStorage.removeItem("mv_tema"); aplicarTema(); toast("Configuración guardada", "ok");
   },
@@ -2758,6 +2870,9 @@ document.addEventListener("input", e => {
     const m = METODOS[S.pagos[i].metodo]; $(`[data-eq="${i}"]`).textContent = m[1] === "USD" ? "USD" : "Bs ≈ " + usd((+t.value || 0) / S.tasa);
     actualizarResumenPago();
   }
+});
+document.addEventListener("change", e => {
+  if (e.target.name === "control_modo") $("#cfgSerie").hidden = e.target.value !== "serie";
 });
 document.addEventListener("change", e => {
   const t = e.target;

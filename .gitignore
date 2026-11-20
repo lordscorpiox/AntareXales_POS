@@ -7,3 +7,5 @@ data/
 respaldos/
 *.db
 *.log
+tests/*.png
+__pycache__/

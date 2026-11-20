@@ -14,6 +14,7 @@ from flask import Flask, Response, g, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 import database as db
+import fiscal
 import stock as stk
 import version as ver
 from errors import ApiError
@@ -491,6 +492,43 @@ def config_put():
             if str(v) not in ("incluido", "adicional"):
                 raise ApiError("El modo de IVA debe ser 'incluido' o 'adicional'")
             nuevos[k] = str(v)
+        elif k in ("fiscal_activo", "igtf_activo", "control_obligatorio", "fiscal_exige_cliente"):
+            nuevos[k] = "1" if str(v).lower() in ("1", "true", "si", "sí") else "0"
+        elif k == "fiscal_razon_social":
+            nuevos[k] = texto(v, "La razón social", False, 120)
+        elif k in ("iva_pct_reducida", "iva_pct_adicional", "igtf_pct"):
+            nombre = {"iva_pct_reducida": "El % de la alícuota reducida", "iva_pct_adicional": "El % de la alícuota adicional",
+                      "igtf_pct": "El % de IGTF"}[k]
+            p = num(v, nombre, 0, default=0.0)
+            if p > 100:
+                raise ApiError(nombre + " debe estar entre 0 y 100")
+            nuevos[k] = fmt_num(round(p, 2))
+        elif k == "igtf_metodos":
+            lista = [m.strip() for m in str(v or "").split(",") if m.strip()]
+            malos = [m for m in lista if m not in METODOS or METODOS[m][1] != "USD"]
+            if malos:
+                raise ApiError("El IGTF solo aplica a métodos en divisas (efectivo USD, Zelle): " + ", ".join(malos))
+            nuevos[k] = ",".join(dict.fromkeys(lista))
+        elif k == "control_modo":
+            if str(v) not in ("manual", "serie"):
+                raise ApiError("El modo del número de control debe ser 'manual' o 'serie'")
+            nuevos[k] = str(v)
+        elif k == "control_prefijo":
+            v = texto(v, "El prefijo del número de control", False, 10)
+            if v and not re.match(r"^[0-9A-Za-z\-]+$", v):
+                raise ApiError("El prefijo del control solo admite letras, números y guion")
+            nuevos[k] = v
+        elif k == "control_digitos":
+            n = int(num(v, "Los dígitos del número de control", 1, default=8.0))
+            if n > 12:
+                raise ApiError("El número de control no puede pasar de 12 dígitos")
+            nuevos[k] = str(n)
+        elif k in ("sig_control", "control_hasta"):
+            n = num(v, "El número de control", 0, default=0.0)
+            if n != int(n) or n > 999999999999 or (k == "sig_control" and n < 1):
+                raise ApiError("El próximo número de control debe ser un entero positivo" if k == "sig_control"
+                               else "El tope del rango de control debe ser un entero (0 = sin tope)")
+            nuevos[k] = str(int(n))
         elif k == "proforma_validez":
             n = int(num(v, "Los días de validez de la proforma", 1, default=7.0))
             if n > 365:
@@ -514,11 +552,29 @@ def config_put():
             nuevos[k] = v
         else:
             nuevos[k] = texto(v, k, False, 300)
+    resultante = {**get_config(conn), **nuevos}
+    if resultante.get("fiscal_activo") == "1":
+        est = fiscal.estado(resultante)
+        if not est["listo"]:
+            faltan = "; ".join(f"{p['titulo']}" + (f" ({p['detalle']})" if p["detalle"] else "")
+                               for p in est["pasos"] if p["obligatorio"] and not p["ok"])
+            raise ApiError("No se puede activar el modo fiscal todavía. Falta: " + faltan)
     with conn:
         for k, v in nuevos.items():
             conn.execute("INSERT INTO config(clave, valor) VALUES(?,?) "
                          "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (k, v))
     return ok(get_config(conn))
+
+
+@app.get("/api/fiscal/estado")
+def fiscal_estado():
+    """Asistente del modo fiscal: qué falta para poder activarlo."""
+    return ok(fiscal.estado(get_config(get_db())))
+
+
+@app.get("/api/fiscal/rif")
+def fiscal_rif():
+    return ok(fiscal.validar_rif(request.args.get("rif") or ""))
 
 
 # --------------------------------------------------------------------------- categorías
@@ -671,9 +727,21 @@ def calcular_producto(data, actual=None):
     else:
         costo, pct, precio_usd = calcular_precio(data, actual)
         precio_bs = 0.0
-    return {"unidad": unidad, "precio_moneda": moneda, "costo_usd": costo, "ganancia_pct": pct,
+    res = {"unidad": unidad, "precio_moneda": moneda, "costo_usd": costo, "ganancia_pct": pct,
             "precio_usd": precio_usd, "precio_bs": precio_bs,
             "iva_exento": flag(data.get("iva_exento"), base.get("iva_exento", 0)) if "iva_exento" in data else int(base.get("iva_exento", 0) or 0)}
+    if "iva_alicuota" in data:
+        a = str(data.get("iva_alicuota") or "").strip().lower()
+        if a not in ("", "general", "reducida", "adicional", "exento"):
+            raise ApiError("Alícuota de IVA no válida (general, reducida, adicional o exento)")
+        res["iva_alicuota"] = a
+        res["iva_exento"] = 1 if a == "exento" else 0
+    else:
+        alic = base.get("iva_alicuota", "") or ""
+        if "iva_exento" in data:  # casilla vieja / CSV: mantiene la alícuota en sintonía
+            alic = "exento" if res["iva_exento"] else ("" if alic == "exento" else alic)
+        res["iva_alicuota"] = alic
+    return res
 
 
 IMAGEN_MAX_BYTES = 600 * 1024
@@ -791,9 +859,9 @@ def productos_post():
         with conn:
             cur = conn.execute(
                 "INSERT INTO productos(codigo, nombre, categoria_id, unidad, costo_usd, ganancia_pct, precio_moneda, precio_usd, "
-                "precio_bs, iva_exento, stock, stock_minimo, tipo, grupo, variante, creado) VALUES(?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)",
+                "precio_bs, iva_exento, iva_alicuota, stock, stock_minimo, tipo, grupo, variante, creado) VALUES(?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)",
                 (codigo, nombre, cat, pr["unidad"], pr["costo_usd"], pr["ganancia_pct"], pr["precio_moneda"], pr["precio_usd"],
-                 pr["precio_bs"], pr["iva_exento"], minimo, tipo, grupo, variante, db.now_str()))
+                 pr["precio_bs"], pr["iva_exento"], pr["iva_alicuota"], minimo, tipo, grupo, variante, db.now_str()))
             pid = cur.lastrowid
             if tipo == "combo":
                 stk.guardar_componentes(conn, pid, data.get("componentes"))
@@ -834,9 +902,9 @@ def productos_put(pid):
         with conn:
             conn.execute(
                 "UPDATE productos SET codigo=?, nombre=?, categoria_id=?, unidad=?, costo_usd=?, ganancia_pct=?, precio_moneda=?, "
-                "precio_usd=?, precio_bs=?, iva_exento=?, stock_minimo=?, grupo=?, variante=? WHERE id=?",
+                "precio_usd=?, precio_bs=?, iva_exento=?, iva_alicuota=?, stock_minimo=?, grupo=?, variante=? WHERE id=?",
                 (codigo, nombre, cat, pr["unidad"], pr["costo_usd"], pr["ganancia_pct"], pr["precio_moneda"], pr["precio_usd"],
-                 pr["precio_bs"], pr["iva_exento"], minimo, grupo, variante, pid))
+                 pr["precio_bs"], pr["iva_exento"], pr["iva_alicuota"], minimo, grupo, variante, pid))
             if es_combo:
                 if "componentes" in data:
                     stk.guardar_componentes(conn, pid, data["componentes"])
@@ -995,9 +1063,9 @@ def productos_bulk():
                 if existente:
                     conn.execute(
                         "UPDATE productos SET nombre=?, categoria_id=?, unidad=?, costo_usd=?, ganancia_pct=?, precio_moneda=?, "
-                        "precio_usd=?, precio_bs=?, iva_exento=?, stock_minimo=? WHERE id=?",
+                        "precio_usd=?, precio_bs=?, iva_exento=?, iva_alicuota=?, stock_minimo=? WHERE id=?",
                         (nombre, cat_id, pr["unidad"], pr["costo_usd"], pr["ganancia_pct"], pr["precio_moneda"], pr["precio_usd"],
-                         pr["precio_bs"], pr["iva_exento"], minimo, existente["id"]))
+                         pr["precio_bs"], pr["iva_exento"], pr["iva_alicuota"], minimo, existente["id"]))
                     stk.ajustar_total(conn, existente["id"], stock, "Carga masiva CSV", g.user["usuario"])
                     actualizados += 1
                 else:
@@ -1301,6 +1369,7 @@ def totales_fiscales(lineas, pct, modo):
 def calcular_lineas(conn, cantidades, tasa, cfg, validar_stock=False):
     """Valida los productos del carrito y calcula sus líneas (con IVA si está activo)."""
     pct, modo = iva_config(cfg)
+    tasas = fiscal.tasas_iva(cfg)
     permitir_negativo = cfg.get("permitir_stock_negativo") == "1"
     lineas = []
     for pid, cant in cantidades.items():
@@ -1315,7 +1384,9 @@ def calcular_lineas(conn, cantidades, tasa, cfg, validar_stock=False):
             p["costo_usd"] = stk.costo_combo(conn, pid)  # el costo del combo es la suma de sus componentes
             if not stk.componentes(conn, pid):
                 raise ApiError(f"El combo «{p['nombre']}» no tiene componentes")
-        lineas.append(calcular_linea(p, cant, tasa, pct, modo))
+        alic = fiscal.alicuota_producto(p)
+        p["iva_exento"] = 1 if alic == "exento" else 0
+        lineas.append(calcular_linea(p, cant, tasa, tasas[alic] if (pct > 0 and alic != "exento") else pct, modo))
     if validar_stock and not permitir_negativo:
         stk.validar_demanda(conn, cantidades, stk.almacen_ventas(conn))
     return lineas, totales_fiscales(lineas, pct, modo)
@@ -1398,6 +1469,8 @@ def ventas_post():
         lineas, tot = calcular_lineas(conn, cantidades, tasa, cfg, validar_stock=True)
         total_usd, total_bs = tot["total_usd"], tot["total_bs"]
 
+        igtf_pct, igtf_metodos = fiscal.igtf_config(cfg)
+        recibido_divisa = 0.0   # lo entregado en métodos sujetos a IGTF (incluye el impuesto)
         pagos = []
         pagado_usd = 0.0
         pagado_bs = 0.0   # lo recibido expresado en Bs (los pagos en Bs cuentan exactos; los USD a la tasa)
@@ -1414,6 +1487,8 @@ def ventas_post():
             monto = num(pg.get("monto"), f"El monto de {METODOS[metodo][0]}", estricto_positivo=True)
             monto_usd = monto if moneda == "USD" else monto / tasa
             pagado_usd += monto_usd
+            if metodo in igtf_metodos:
+                recibido_divisa += monto_usd
             pagado_bs += monto if moneda == "BS" else monto * tasa
             solo_bs = solo_bs and moneda == "BS"
             hay_efectivo = hay_efectivo or metodo in EFECTIVO
@@ -1425,19 +1500,24 @@ def ventas_post():
         # desviaba el vuelto varios bolívares cuando la tasa es alta (1.500 − 1.100 daba 397,78 en vez de 400).
         solo_bs = solo_bs and bool(pagos)
         tol_bs = 0.05 + 0.01 * len(lineas)
-        falta = (pagado_bs + tol_bs < total_bs) if solo_bs else (pagado_usd + TOLERANCIA_USD < total_usd)
-        excede = (pagado_bs - total_bs > tol_bs) if solo_bs else (pagado_usd - total_usd > TOLERANCIA_USD)
+        # IGTF: se cobra además del total, sobre la parte de la factura pagada en divisas (solo con el modo fiscal activo).
+        igtf_base, igtf_usd, a_cobrar_usd = fiscal.calcular_igtf(igtf_pct, recibido_divisa, pagado_usd - recibido_divisa, total_usd)
+        igtf_bs = r2(igtf_usd * tasa)
+        if igtf_usd <= 0:
+            igtf_pct = 0.0
+        falta = (pagado_bs + tol_bs < total_bs) if solo_bs else (pagado_usd + TOLERANCIA_USD < a_cobrar_usd)
+        excede = (pagado_bs - total_bs > tol_bs) if solo_bs else (pagado_usd - a_cobrar_usd > TOLERANCIA_USD)
         if falta:
             if not cliente:
-                raise ApiError(f"Pago insuficiente: faltan ${total_usd - pagado_usd:.2f}. Seleccione un cliente para vender a crédito")
+                raise ApiError(f"Pago insuficiente: faltan ${a_cobrar_usd - pagado_usd:.2f}. Seleccione un cliente para vender a crédito")
             if not a_credito:
                 raise ApiError("El pago no cubre el total; confirme la venta a crédito")
-            credito_usd = r2(total_usd - pagado_usd)
+            credito_usd = r2(a_cobrar_usd - pagado_usd)
         elif excede:
             if not hay_efectivo:
                 raise ApiError("El pago excede el total y no hay efectivo para dar el vuelto")
             vuelto_bs = r2(max(0.0, pagado_bs - total_bs))
-            vuelto_usd = r2(vuelto_bs / tasa) if solo_bs else r2(pagado_usd - total_usd)
+            vuelto_usd = r2(vuelto_bs / tasa) if solo_bs else r2(pagado_usd - a_cobrar_usd)
         vuelto_en = ""
         if excede and not falta:  # moneda en que se entrega el vuelto (afecta el arqueo de caja)
             vuelto_en = str(data.get("vuelto_en") or "").upper() or ("USD" if hay_efectivo_usd else "BS")
@@ -1447,12 +1527,13 @@ def ventas_post():
         cur = conn.execute(
             "INSERT INTO ventas(fecha, cajero_id, cajero_nombre, cliente_id, cliente_nombre, tasa, total_usd, total_bs, "
             "pagado_usd, credito_usd, vuelto_usd, vuelto_bs, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, base_bs, "
-            "exento_bs, iva_bs, turno_id, vuelto_en) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "exento_bs, iva_bs, turno_id, vuelto_en, igtf_pct, igtf_base_usd, igtf_usd, igtf_bs) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (db.now_str(), g.user["user_id"], g.user["nombre"] or g.user["usuario"],
              cliente["id"] if cliente else None, cliente["nombre"] if cliente else "",
              tasa, total_usd, total_bs, r2(pagado_usd), credito_usd, vuelto_usd, vuelto_bs,
              tot["iva_pct"], tot["iva_modo"], tot["base_usd"], tot["exento_usd"], tot["iva_usd"], tot["base_bs"],
-             tot["exento_bs"], tot["iva_bs"], turno_id, vuelto_en))
+             tot["exento_bs"], tot["iva_bs"], turno_id, vuelto_en, igtf_pct, igtf_base, igtf_usd, igtf_bs))
         vid = cur.lastrowid
         for l in lineas:
             p, cant = l["p"], l["cant"]
@@ -1656,7 +1737,37 @@ def documentos_post():
                    "base_bs": venta["total_bs"] if sin_desglose else venta["base_bs"]}
             cliente_id = venta["cliente_id"]
             validez = 0
+        igtf = {"pct": 0.0, "base": 0.0, "usd": 0.0, "bs": 0.0}
+        if venta is not None and tipo != "nota_entrega":
+            igtf = {"pct": venta["igtf_pct"], "base": venta["igtf_base_usd"], "usd": venta["igtf_usd"], "bs": venta["igtf_bs"]}
         cli = datos_cliente_doc(conn, data, cliente_id)
+        es_fiscal = cfg.get("fiscal_activo") == "1" and tipo == "factura"
+        control = texto(data.get("control"), "El número de control", False, 40) if tipo == "factura" else ""
+        emisor = {"nombre": "", "rif": "", "direccion": "", "telefono": ""}
+        if es_fiscal:
+            if cfg.get("fiscal_exige_cliente") == "1":
+                if cli["nombre"] == "Consumidor final" or not cli["rif"]:
+                    raise ApiError("La factura necesita el nombre y el RIF o cédula del cliente")
+            if cli["rif"] and not fiscal.validar_id_cliente(cli["rif"]):
+                raise ApiError("El RIF o cédula del cliente no tiene un formato válido (ej.: V-12345678 o J-12345678-9)")
+            if cfg.get("control_modo") == "serie":
+                sc = int(float(cfg.get("sig_control") or 1))
+                hasta = int(float(cfg.get("control_hasta") or 0))
+                if hasta and sc > hasta:
+                    raise ApiError("Se agotó el rango de números de control autorizado: configure uno nuevo en Fiscal")
+                control = fiscal.formatear_control(cfg, sc)
+                conn.execute("INSERT INTO config(clave, valor) VALUES('sig_control',?) "
+                             "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (str(sc + 1),))
+            elif cfg.get("control_obligatorio", "1") == "1" and not control:
+                raise ApiError("Escriba el número de control de la factura (lo asigna su imprenta digital o máquina fiscal)")
+            if control:
+                if not fiscal.RE_CONTROL.match(control):
+                    raise ApiError("El número de control solo admite letras, números y guion")
+                if conn.execute("SELECT 1 FROM documentos WHERE tipo='factura' AND control=?", (control,)).fetchone():
+                    raise ApiError(f"El número de control {control} ya fue usado en otra factura")
+            emisor = {"nombre": (cfg.get("fiscal_razon_social") or cfg.get("negocio_nombre") or ""),
+                      "rif": fiscal.validar_rif(cfg.get("rif"))["normalizado"], "direccion": cfg.get("direccion") or "",
+                      "telefono": cfg.get("telefono") or ""}
         clave = TIPOS_DOC[tipo]
         sig = int(float(cfg.get(clave) or 1))
         ultimo = conn.execute("SELECT COALESCE(MAX(numero),0) FROM documentos WHERE tipo=?", (tipo,)).fetchone()[0]
@@ -1665,12 +1776,15 @@ def documentos_post():
         cur = conn.execute(
             "INSERT INTO documentos(tipo, numero, fecha, venta_id, cliente_id, cli_nombre, cli_rif, cli_direccion, cli_telefono, "
             "tasa, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, total_usd, base_bs, exento_bs, iva_bs, total_bs, control, "
-            "notas, validez_dias, mostrar_precios, creado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "notas, validez_dias, mostrar_precios, creado_por, igtf_pct, igtf_base_usd, igtf_usd, igtf_bs, fiscal, "
+            "emisor_nombre, emisor_rif, emisor_direccion, emisor_telefono) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (tipo, numero, db.now_str(), venta_id, cliente_id, cli["nombre"], cli["rif"], cli["direccion"], cli["telefono"],
              tasa, tot["iva_pct"], tot["iva_modo"], tot["base_usd"], tot["exento_usd"], tot["iva_usd"], tot["total_usd"],
              tot["base_bs"], tot["exento_bs"], tot["iva_bs"], tot["total_bs"],
-             texto(data.get("control"), "El número de control", False, 40) if tipo == "factura" else "",
-             texto(data.get("notas"), "Las observaciones", False, 400), validez, mostrar, g.user["usuario"]))
+             control,
+             texto(data.get("notas"), "Las observaciones", False, 400), validez, mostrar, g.user["usuario"],
+             igtf["pct"], igtf["base"], igtf["usd"], igtf["bs"], 1 if es_fiscal else 0,
+             emisor["nombre"], emisor["rif"], emisor["direccion"], emisor["telefono"]))
         did = cur.lastrowid
         for it in items:
             conn.execute(

@@ -1,0 +1,55 @@
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from playwright.sync_api import sync_playwright
+OUT = os.path.dirname(os.path.abspath(__file__)); errs = []
+def ok(c, m):
+    print(("OK   " if c else "FAIL ") + m)
+    if not c: errs.append(m)
+with sync_playwright() as p:
+    b = p.chromium.launch()
+    ctx = b.new_context(viewport={"width": 1366, "height": 820}); pg = ctx.new_page(); pg.set_default_timeout(8000); logs = []
+    pg.on("console", lambda m: logs.append(m.text) if m.type == "error" else None); pg.on("pageerror", lambda e: logs.append("PAGEERROR " + str(e)))
+    pg.goto("http://127.0.0.1:5000/")
+    pg.fill("[name=usuario]", "admin"); pg.fill("[name=password]", "admin123"); pg.click("#login button[type=submit]")
+    pg.wait_for_selector("#v-ventas.on")
+    tok = pg.evaluate("() => JSON.parse(sessionStorage.getItem('mv_sesion')).token")
+    def api(m, u, j=None):
+        return pg.evaluate("""async ([m,u,b,t])=>{const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json','X-Auth-Token':t},body:b?JSON.stringify(b):undefined});return (await r.json()).data}""", [m, u, j, tok])
+    api("PUT", "/api/config", {"tasa_bcv": "453.21"})
+    api("POST", "/api/productos", {"nombre": "Fijo1100", "precio_moneda": "BS", "precio_bs": 1100, "precio_usd": 1, "costo_usd": 1, "stock": 50})
+    api("POST", "/api/caja/abrir", {"fondo_usd": 0, "fondo_bs": 0})
+    pg.reload(); pg.wait_for_selector("#v-ventas.on")
+    ok(pg.locator("[data-act=addPago][data-m=biopago]").count() == 1 and "Biopago" in pg.inner_text("#vMetodos"), "botón «+ Biopago» en Ventas")
+    pg.locator("#vGrid .pcard", has_text="Fijo1100").first.click()
+    pg.click("[data-act=addPago][data-m=efectivo_bs]")
+    ok(pg.input_value("[data-pago]") == "1100", f"monto sugerido exacto 1100 ({pg.input_value('[data-pago]')})")
+    pg.fill("[data-pago]", "1500"); pg.dispatch_event("[data-pago]", "input"); pg.wait_for_timeout(200)
+    r = pg.inner_text("#vResumen")
+    ok("400,00" in r and "397" not in r, f"resumen de vuelto en pantalla: {r}")
+    pg.select_option("#vVueltoEn", "BS")
+    pg.click("#btnCobrar"); pg.wait_for_selector("#modalTicket.open")
+    tk = pg.inner_text("#modalTicketBox")
+    ok("400,00" in tk and "397" not in tk, "ticket muestra vuelto 400,00 Bs")
+    pg.screenshot(path=OUT + "/v07_vuelto.png"); pg.click("#modalTicket [data-act=cerrarTicket]")
+    v = api("GET", "/api/ventas/" + str(api("GET", "/api/ventas")[0]["id"]))
+    ok(v["vuelto_bs"] == 400 and v["vuelto_en"] == "BS", f"guardado: vuelto_bs={v['vuelto_bs']} en {v['vuelto_en']}")
+    # Biopago + efectivo
+    pg.locator("#vGrid .pcard", has_text="Fijo1100").first.click()
+    pg.click("[data-act=addPago][data-m=biopago]")
+    ok(pg.input_value("[data-pago]") == "1100", "Biopago sugiere el total en Bs")
+    pg.fill("[data-pago]", "500"); pg.dispatch_event("[data-pago]", "input")
+    pg.click("[data-act=addPago][data-m=efectivo_bs]")
+    ok(pg.locator("[data-pago]").nth(1).input_value() == "600", "segundo método sugiere lo que falta en Bs (600)")
+    pg.click("#btnCobrar"); pg.wait_for_selector("#modalTicket.open")
+    ok("Biopago" in pg.inner_text("#modalTicketBox"), "el ticket lista Biopago")
+    pg.click("#modalTicket [data-act=cerrarTicket]")
+    # pago con tolerancia: falta 0,03 Bs no pide cliente
+    pg.locator("#vGrid .pcard", has_text="Fijo1100").first.click()
+    pg.click("[data-act=addPago][data-m=efectivo_bs]"); pg.fill("[data-pago]", "1099.97"); pg.dispatch_event("[data-pago]", "input"); pg.wait_for_timeout(200)
+    ok("Pagado completo" in pg.inner_text("#vResumen") and not pg.is_disabled("#btnCobrar"), "1099,97 Bs sobre 1100 cuenta como pagado completo")
+    import version as _v
+    ok(_v.VERSION in pg.inner_text("body"), "la versión actual es visible")
+    pg.click("#btnCobrar"); pg.wait_for_selector("#modalTicket.open"); pg.click("#modalTicket [data-act=cerrarTicket]")
+    ok(not logs, f"sin errores de consola: {logs}")
+    b.close()
+print("\nFALLAS: %d" % len(errs)); raise SystemExit(1 if errs else 0)

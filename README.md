@@ -49,6 +49,15 @@ El botón 🖼 junto al buscador de Ventas muestra u oculta las fotos (vista com
 - **Importante**: estos documentos los genera el sistema para uso interno y de gestión. No sustituyen una factura fiscal autorizada por el SENIAT (imprenta o sistema autorizado); si su negocio debe emitir factura fiscal, use el campo «Nº de control» solo con el talonario o sistema que corresponda y consulte a su contador.
 - *Usuarios* y *Respaldo* están ahora dentro de *Configuración*.
 
+## Modo fiscal (v0.11, desactivado por defecto)
+- *Configuración › Fiscal* guía la activación: razón social, RIF, domicilio fiscal, IVA, número de control. Opcional: IGTF sobre pagos en divisas.
+- Cada producto elige su alícuota (general, reducida, adicional o exento); las facturas desglosan el IVA por alícuota.
+- Número de control: se escribe al facturar (imprenta digital / máquina fiscal) o se genera desde una serie propia con rango.
+- Los porcentajes (IVA reducido/adicional, IGTF) son parámetros: confírmelos con su contador. Esta versión es la base; las facturas inmutables, las notas de crédito/débito y los libros llegan en las versiones 0.12 y 0.13.
+
+## Pruebas
+`bash tests/run_all.sh` ejecuta las pruebas de API; `tests/e2e_fiscal.py`, `e2e8.py` y `e2e10.py` usan Playwright (levantan `tests/run_server.py`; `e2e8`/`e2e10` esperan el puerto 5000).
+
 ## Caja, compras e inventario avanzado (v0.5)
 - **Caja**: abra su turno con el fondo inicial al empezar; al cerrar, cuente el efectivo (Bs y USD) y el sistema muestra faltante/sobrante e imprime el reporte de cierre. Gastos y retiros de caja entran en el cálculo. *Configuración › Caja obligatoria* exige turno abierto para cobrar.
 - **Ventas en espera**: botón *Suspender venta* y *En espera* en la pantalla de Ventas.

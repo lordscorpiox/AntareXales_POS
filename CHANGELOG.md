@@ -3,6 +3,16 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.11
+Base del **modo fiscal** (primera de tres entregas de adecuación al SENIAT). **Viene desactivado**: con el modo fiscal apagado la aplicación se comporta exactamente como en la 0.10. Todo es configurable por el comercio; los porcentajes y reglas son parámetros que conviene confirmar con su contador.
+- **Pestaña Configuración › Fiscal** con un **asistente de activación**: lista qué falta (razón social, RIF válido, domicilio fiscal, IVA activo, número de control) con un botón «Ir» a donde corregirlo. El modo fiscal no se puede activar —ni dejar incompleto— mientras falte algo obligatorio.
+- **Validación del RIF** (formato `J-12345678-9` y dígito verificador; el dígito verificador solo avisa, no bloquea).
+- **Alícuotas de IVA por producto**: general, reducida, adicional (se suma a la general, p. ej. 16 % + 15 %) y exento. Ticket, carrito y facturas muestran el IVA **desglosado por alícuota**. Los productos «exentos» de versiones anteriores se conservan.
+- **IGTF** (pagos en divisas): porcentaje y métodos de pago configurables (Efectivo USD y Zelle por defecto). Se calcula sobre la parte de la factura pagada en divisas, se suma al total a cobrar, y el efectivo y los pagos ya incluyen el impuesto (el arqueo de caja cuadra solo). Ticket y factura lo muestran aparte («TOTAL A PAGAR»).
+- **Facturas fiscales**: guardan una copia de los datos del emisor (razón social, RIF, domicilio) tal como estaban al emitir; **número de control** que se escribe al facturar (imprenta digital o máquina fiscal, sin repetidos) o se asigna solo desde una **serie propia** dentro de un rango autorizado; opción de exigir nombre y RIF/cédula del cliente.
+- Nuevas **pruebas automáticas** en la carpeta `tests/` (núcleo, fiscal, actualizaciones, navegador) y se ejecutan antes de compilar en GitHub.
+- Pendiente para las próximas entregas: facturas inmutables y notas de crédito/débito con bitácora (0.12); libros de ventas/compras, contingencia y respaldo externo (0.13).
+
 ## 0.10
 - **Pantalla inicial animada** al abrir la aplicación: lluvia de símbolos en azul eléctrico (estilo Matrix) sobre fondo oscuro; aparece primero la **X roja** con resplandor y luego se despliega el resto del nombre «AntareXales POS». Dura unos 4,5 s y se salta con un clic o cualquier tecla. Con «reducir movimiento» activado en Windows se muestra el nombre fijo y se cierra enseguida.
 - **Configuración en pestañas**: General · Ventas e inventario · Impuestos y documentos · Actualizaciones · Acerca de. Un solo botón «Guardar configuración» guarda lo de todas las pestañas, y la aplicación recuerda la pestaña en la que estaba.

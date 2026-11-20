@@ -201,11 +201,11 @@ def variantes_post():
                 etiqueta = " / ".join(vals)
                 cur = conn.execute(
                     "INSERT INTO productos(codigo, nombre, categoria_id, unidad, costo_usd, ganancia_pct, precio_moneda, "
-                    "precio_usd, precio_bs, iva_exento, stock, stock_minimo, tipo, grupo, variante, creado) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,0,?,'simple',?,?,?)",
+                    "precio_usd, precio_bs, iva_exento, iva_alicuota, stock, stock_minimo, tipo, grupo, variante, creado) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,0,?,'simple',?,?,?)",
                     (_codigo_variante(codigo_base, vals) if codigo_base else None, f"{nombre} — {etiqueta}", cat, pr["unidad"],
                      pr["costo_usd"], pr["ganancia_pct"], pr["precio_moneda"], pr["precio_usd"], pr["precio_bs"],
-                     pr["iva_exento"], minimo, nombre, etiqueta, db.now_str()))
+                     pr["iva_exento"], pr["iva_alicuota"], minimo, nombre, etiqueta, db.now_str()))
                 if stock:
                     stk.ingresar(conn, cur.lastrowid, stk.almacen_principal(conn), stock, "inicial", "Stock inicial",
                                  g.user["usuario"])
