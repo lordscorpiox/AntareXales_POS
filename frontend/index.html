@@ -216,8 +216,7 @@ table.tbl{width:100%;border-collapse:collapse}
 .sec h3{font-size:14px;margin-bottom:12px;font-weight:700;letter-spacing:.02em}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .about{display:flex;gap:16px;align-items:center}
-.tabp{display:grid;gap:12px}.tabp[hidden]{display:none!important}
-.tabp.about{display:flex}.tabp.about[hidden]{display:none!important}
+.cfgcard{display:grid;gap:12px}.cfgv .toolbar .muted{font-size:13px}
 .about img{width:64px;height:64px;filter:drop-shadow(0 4px 14px rgba(229,56,77,.4))}
 .about .t{font-size:18px;font-weight:800;letter-spacing:-.3px}
 .about .t .x{color:var(--pri)}
@@ -597,19 +596,11 @@ table.tbl{width:100%;border-collapse:collapse}
         </div>
       </section>
 
-      <section id="v-config" class="view">
-        <form data-form="config" id="cfgForm" class="card sec" style="max-width:760px;display:grid;gap:12px">
-        <div class="tabs" id="cfgTabs" role="tablist">
-          <button type="button" role="tab" data-act="cfgTab" data-t="general" class="on">General</button>
-          <button type="button" role="tab" data-act="cfgTab" data-t="ventas">Ventas e inventario</button>
-          <button type="button" role="tab" data-act="cfgTab" data-t="impuestos">Impuestos y documentos</button>
-          <button type="button" role="tab" data-act="cfgTab" data-t="fiscal" id="cfgTabFiscal">Fiscal</button>
-          <button type="button" role="tab" data-act="cfgTab" data-t="bitacora" id="cfgTabBit">Bitácora</button>
-          <button type="button" role="tab" data-act="cfgTab" data-t="actualizaciones">Actualizaciones</button>
-          <button type="button" role="tab" data-act="cfgTab" data-t="acerca">Acerca de</button>
-        </div>
-          <div class="tabp" data-tabp="general">
-          <h3>Datos del negocio</h3>
+      <!-- 8. CONFIGURACIÓN: cada sección es una vista completa (submenú) -->
+      <form data-form="config" id="cfgForm">
+      <section id="v-cfg-general" class="view cfgv">
+        <div class="toolbar"><span class="muted small">Datos del negocio</span><span class="sp"></span><button type="submit" class="btn pri">💾 Guardar cambios</button></div>
+        <div class="card sec cfgcard">
           <div class="grid2">
             <div class="field"><label>Nombre del negocio</label><input name="negocio_nombre"></div>
             <div class="field"><label>RIF</label><input name="rif"></div>
@@ -627,9 +618,11 @@ table.tbl{width:100%;border-collapse:collapse}
               <button class="btn sm" type="button" data-act="quitarLogo">Quitar</button>
             </div></div>
           <div class="field" style="max-width:340px"><label>Tema de la aplicación</label><select name="tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option></select></div>
-          </div>
-          <div class="tabp" data-tabp="ventas" hidden>
-          <h3>Ventas, inventario y caja</h3>
+        </div>
+      </section>
+      <section id="v-cfg-ventas" class="view cfgv">
+        <div class="toolbar"><span class="muted small">Ventas, inventario y caja</span><span class="sp"></span><button type="submit" class="btn pri">💾 Guardar cambios</button></div>
+        <div class="card sec cfgcard">
           <div class="field" style="max-width:340px"><label>% de ganancia por defecto</label><input name="ganancia_default" type="number" step="any" min="0"><div class="hint">Se propone al crear un producto (ganancia sobre el costo).</div></div>
           <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--text)"><input type="checkbox" name="permitir_stock_negativo"> Permitir vender sin stock suficiente (stock negativo)</label>
           <div class="grid2">
@@ -639,9 +632,11 @@ table.tbl{width:100%;border-collapse:collapse}
               <div class="hint">Lotes que vencen dentro de este plazo aparecen como «próximos a vencer».</div></div></div>
           <label class="chk"><input type="checkbox" name="caja_obligatoria"> Exigir un turno de caja abierto para cobrar (con arqueo al cierre)</label>
           <label class="chk"><input type="checkbox" name="cajero_cambia_tasa"> Permitir que los cajeros cambien la tasa BCV (si no, solo el administrador)</label>
-          </div>
-          <div class="tabp" data-tabp="impuestos" hidden>
-          <h3>Impuestos (IVA)</h3>
+        </div>
+      </section>
+      <section id="v-cfg-impuestos" class="view cfgv">
+        <div class="toolbar"><span class="muted small">Impuestos y documentos</span><span class="sp"></span><button type="submit" class="btn pri">💾 Guardar cambios</button></div>
+        <div class="card sec cfgcard">
           <label class="chk"><input type="checkbox" name="iva_activo"> Activar IVA (desactivado por defecto)</label>
           <div class="grid2" id="ivaCampos">
             <div class="field"><label>Alícuota de IVA (%)</label><input name="iva_pct" type="number" step="any" min="0" max="100"><div class="hint">En Venezuela la general es 16 %.</div></div>
@@ -652,7 +647,7 @@ table.tbl{width:100%;border-collapse:collapse}
             <div class="field"><label>Alícuota reducida (%)</label><input name="iva_pct_reducida" type="number" step="any" min="0" max="100"></div>
             <div class="field"><label>Alícuota adicional (%)</label><input name="iva_pct_adicional" type="number" step="any" min="0" max="100"><div class="hint">Se suma a la general (bienes de lujo: 16 % + 15 % = 31 %).</div></div></div>
           <div class="hint" style="margin-top:-6px">Con el IVA activo, cada producto elige su alícuota (general, reducida, adicional o exento) en su ficha. Los porcentajes son parámetros: confírmelos con su contador.</div>
-          <h3 class="sec-h">Documentos (facturas, proformas y notas de entrega)</h3>
+</div><div class="card sec cfgcard"><h3>Documentos (facturas, proformas y notas de entrega)</h3>
           <div class="grid3">
             <div class="field"><label>Próxima factura Nº</label><input name="sig_factura" type="number" min="1" step="1"></div>
             <div class="field"><label>Próxima proforma Nº</label><input name="sig_proforma" type="number" min="1" step="1"></div>
@@ -663,14 +658,16 @@ table.tbl{width:100%;border-collapse:collapse}
           <div class="grid2">
             <div class="field"><label>Validez de la proforma (días)</label><input name="proforma_validez" type="number" min="1" max="365" step="1"></div>
             <div class="field"><label>Texto al pie de los documentos</label><input name="doc_pie" placeholder="Condiciones de pago, datos bancarios…"></div></div>
-          </div>
-          <div class="tabp" data-tabp="fiscal" hidden>
-          <h3>Modo fiscal</h3>
+        </div>
+      </section>
+      <section id="v-cfg-fiscal" class="view cfgv">
+        <div class="toolbar"><span class="muted small">Modo fiscal</span><span class="sp"></span><button type="submit" class="btn pri">💾 Guardar cambios</button></div>
+        <div class="card sec cfgcard">
           <div class="hint">Desactivado por defecto. Al activarlo, las facturas llevan los datos fiscales del comercio, el número de control, el IVA por alícuota y, si lo configura, el IGTF. Es una herramienta de apoyo: valide con su contador qué le corresponde.</div>
           <div id="fiscalPasos"></div>
           <label class="chk"><input type="checkbox" name="fiscal_activo"> Activar el modo fiscal</label>
           <div class="field"><label>Razón social</label><input name="fiscal_razon_social" maxlength="120" placeholder="Tal como figura en el RIF"><div class="hint">El RIF y el domicilio fiscal se escriben en la pestaña General.</div></div>
-          <h3 class="sec-h">Número de control de las facturas</h3>
+</div><div class="card sec cfgcard"><h3>Número de control de las facturas</h3>
           <div class="grid2">
             <div class="field"><label>Cómo se asigna</label><select name="control_modo"><option value="manual">Se escribe al facturar (imprenta digital / máquina fiscal)</option><option value="serie">Serie propia dentro de un rango autorizado</option></select></div>
             <label class="chk" style="align-self:end"><input type="checkbox" name="control_obligatorio"> Exigir el número de control al facturar</label></div>
@@ -681,13 +678,25 @@ table.tbl{width:100%;border-collapse:collapse}
             <div class="field"><label>Último número autorizado (0 = sin tope)</label><input name="control_hasta" type="number" min="0" step="1"></div></div>
           <label class="chk"><input type="checkbox" name="fiscal_exige_cliente"> Exigir nombre y RIF / cédula del cliente en cada factura</label>
           <label class="chk"><input type="checkbox" name="fiscal_permite_anular"> Permitir anular facturas fiscales (no recomendado: lo normal es corregirlas con una nota de crédito; la anulación exige motivo)</label>
-          <h3 class="sec-h">IGTF (pagos en divisas)</h3>
+</div><div class="card sec cfgcard"><h3>IGTF (pagos en divisas)</h3>
           <label class="chk"><input type="checkbox" name="igtf_activo"> Cobrar IGTF sobre lo pagado en divisas</label>
           <div class="grid2"><div class="field"><label>Alícuota IGTF (%)</label><input name="igtf_pct" type="number" step="any" min="0" max="100"><div class="hint">Confirme el porcentaje vigente con su contador.</div></div>
             <div class="field"><label>Métodos de pago sujetos a IGTF</label><div id="igtfMetodos" style="display:grid;gap:4px"></div></div></div>
-          </div>
-          <div class="tabp" data-tabp="bitacora" hidden>
-          <h3>Bitácora de auditoría</h3>
+        </div>
+      </section>
+      <section id="v-actualizaciones" class="view cfgv">
+        <div class="toolbar"><span class="muted small">Actualizaciones</span><span class="sp"></span><button type="submit" class="btn pri">💾 Guardar cambios</button></div>
+        <div class="card sec cfgcard">
+          <div class="small muted">Versión instalada: <b class="ver-n"></b> · <span id="updRev">sin consultar</span></div>
+          <label class="chk"><input type="checkbox" name="actualizar_al_abrir"> Buscar actualizaciones al abrir la aplicación (requiere Internet)</label>
+          <div class="toolbar" style="margin:0"><button type="button" class="btn" data-act="updBuscar" id="btnUpdBuscar">🔄 Buscar actualizaciones</button></div>
+          <div id="updEstado" class="small"></div>
+        </div>
+      </section>
+      </form>
+      <section id="v-bitacora" class="view cfgv">
+        <div class="toolbar"><span class="muted small">Bitácora de auditoría</span><span class="sp"></span></div>
+        <div class="card sec cfgcard">
           <div class="hint">Registro de quién hizo qué y cuándo (anulaciones, documentos, cambios de configuración, usuarios...). Solo se agrega: no se puede editar ni borrar.</div>
           <div class="row" style="gap:8px;flex-wrap:wrap;margin:8px 0">
             <label class="small muted">Desde <input id="bDesde" type="date"></label><label class="small muted">Hasta <input id="bHasta" type="date"></label>
@@ -696,18 +705,12 @@ table.tbl{width:100%;border-collapse:collapse}
           <div class="tbl-wrap" style="max-height:420px"><table class="tbl"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody id="bitBody"></tbody></table></div>
           <div class="small muted" id="bitInfo" style="margin-top:6px"></div>
           <button type="button" class="btn sm" data-act="bitMas" id="bitMas" hidden>Cargar más</button>
-          </div>
-          <div class="tabp" data-tabp="actualizaciones" hidden>
-          <h3>Actualizaciones</h3>
-          <div class="small muted">Versión instalada: <b class="ver-n"></b> · <span id="updRev">sin consultar</span></div>
-          <label class="chk"><input type="checkbox" name="actualizar_al_abrir"> Buscar actualizaciones al abrir la aplicación (requiere Internet)</label>
-          <div class="toolbar" style="margin:0"><button type="button" class="btn" data-act="updBuscar" id="btnUpdBuscar">🔄 Buscar actualizaciones</button></div>
-          <div id="updEstado" class="small"></div>
-          </div>
-        <div class="tabp about" data-tabp="acerca" hidden><img src="/assets/icon.png" alt="">
-          <div><div class="t">Antare<span class="x">X</span>ales POS</div><div class="muted">Versión <b class="ver"></b></div><div class="hint">Desarrollado por <span class="autor"></span><div class="powered"></div></div></div></div>
-          <div class="mfoot" id="cfgPie"><button class="btn pri" type="submit">Guardar configuración</button></div>
-        </form>
+        </div>
+      </section>
+      <section id="v-acerca" class="view">
+        <div class="toolbar"><span class="muted small">Acerca de</span></div>
+        <div class="card sec cfgcard"><div class="about"><img src="/assets/icon.png" alt="">
+          <div><div class="t">Antare<span class="x">X</span>ales POS</div><div class="muted">Versión <b class="ver"></b></div><div class="hint">Desarrollado por <span class="autor"></span><div class="powered"></div></div></div></div></div>
       </section>
 
     </main>
@@ -1029,7 +1032,11 @@ const VISTAS = [
   ["compras", "🚚", "Compras", true], ["clientes", "👥", "Clientes", false],
   ["documentos", "📄", "Documentos", false], ["historial", "🧾", "Historial", false], ["reportes", "📊", "Reportes", true],
   ["config", "⚙️", "Configuración", true],
+  ["cfg-general", "🏢", "General", true, "config"], ["cfg-ventas", "🛍️", "Ventas e inventario", true, "config"],
+  ["cfg-impuestos", "🧮", "Impuestos y documentos", true, "config"], ["cfg-fiscal", "🧾", "Fiscal", true, "config"],
   ["usuarios", "🔑", "Usuarios", true, "config"], ["respaldo", "💾", "Respaldo", true, "config"],
+  ["bitacora", "📜", "Bitácora", true, "config"], ["actualizaciones", "🔄", "Actualizaciones", true, "config"],
+  ["acerca", "ℹ️", "Acerca de", true, "config"],
 ];
 function navHtml() {
   const vis = VISTAS.filter(v => !v[3] || esAdmin());
@@ -1112,18 +1119,22 @@ function aplicarTema() {
 
 /* ============================== navegación ============================== */
 const tituloDe = v => { const d = VISTAS.find(x => x[0] === v); const padre = d && d[4] ? VISTAS.find(x => x[0] === d[4]) : null; return padre ? `${padre[2]} › ${d[2]}` : (d ? d[2] : ""); };
+const esVistaCfg = v => v === "actualizaciones" || String(v).startsWith("cfg-");
 function ir(v) {
+  const hijo1 = VISTAS.find(h => h[4] === v && (!h[3] || esAdmin()));
+  if (hijo1 && !$("#v-" + v)) v = hijo1[0];   // «Configuración» abre su primera sección
   const def = VISTAS.find(x => x[0] === v && (!x[3] || esAdmin()));
   if (!def) v = "ventas";
   const grupo = def ? (def[4] || (VISTAS.some(h => h[4] === v) ? v : null)) : null;
-  S.vista = v;
+  const venia = S.vista; S.vista = v;
   $$(".view").forEach(el => el.classList.toggle("on", el.id === "v-" + v));
   $$("#nav button").forEach(b => { b.classList.toggle("on", b.dataset.v === v); b.classList.toggle("anc", !!(def && def[4]) && b.dataset.v === def[4]); });
   $$("#nav .sub").forEach(sd => setSub(sd.id.slice(4), sd.id === "sub-" + grupo));
   $("#titulo").textContent = tituloDe(v);
   actualizarTasaUI();
-  ({ventas: renderVentas, caja: renderCaja, compras: renderCompras, inventario: renderInventario, clientes: renderClientes, documentos: initDocumentos, historial: initHistorial,
-    reportes: initReportes, respaldo: initRespaldo, usuarios: renderUsuarios, config: initConfig})[v]();
+  const f = ({ventas: renderVentas, caja: renderCaja, compras: renderCompras, inventario: renderInventario, clientes: renderClientes, documentos: initDocumentos, historial: initHistorial,
+    reportes: initReportes, respaldo: initRespaldo, usuarios: renderUsuarios, bitacora: () => cargarBitacora(false), acerca: () => {}})[v] || (esVistaCfg(v) ? (() => { if (!esVistaCfg(venia)) initConfig(); }) : null);   // entre secciones del mismo formulario no se pierde lo editado
+  if (f) f();
 }
 function actualizarTasaUI() {
   $("#footTasa").textContent = nf2.format(S.tasa) + " Bs/USD";
@@ -2040,16 +2051,7 @@ const importarCsv = safe(async () => {
 });
 
 /* ============================== 8. CONFIGURACIÓN ============================== */
-const CFG_TABS = ["general", "ventas", "impuestos", "fiscal", "bitacora", "actualizaciones", "acerca"];
-function cfgTab(t) {
-  if (!CFG_TABS.includes(t)) t = "general";
-  S.cfgTab = t;
-  $$("#cfgTabs button").forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
-  $$("#cfgForm .tabp").forEach(p => { p.hidden = p.dataset.tabp !== t; });
-  $("#cfgPie").hidden = t === "acerca" || t === "bitacora";   // «Acerca de» y la bitácora no tienen nada que guardar
-  if (t === "bitacora") cargarBitacora(false);
-}
-const FISCAL_IR = {razon: "fiscal", rif: "general", domicilio: "general", iva: "impuestos", control: "fiscal", igtf: "fiscal"};
+const FISCAL_IR = {razon: "cfg-fiscal", rif: "cfg-general", domicilio: "cfg-general", iva: "cfg-impuestos", control: "cfg-fiscal", igtf: "cfg-fiscal"};
 const BIT = {pos: 0, total: 0};
 const cargarBitacora = safe(async (mas) => {
   if (!mas) { BIT.pos = 0; $("#bitBody").innerHTML = ""; }
@@ -2062,17 +2064,16 @@ const cargarBitacora = safe(async (mas) => {
   $("#bitInfo").textContent = `${BIT.pos} de ${BIT.total} registro(s)`; $("#bitMas").hidden = BIT.pos >= BIT.total;
 });
 function pintarFiscal() {
-  $("#cfgTabFiscal").textContent = fiscalOn() ? "Fiscal ●" : "Fiscal";
+  const nb = $('#nav button[data-v="cfg-fiscal"]'); if (nb) nb.textContent = "🧾 Fiscal" + (fiscalOn() ? " ●" : "");
   api("GET", "/api/fiscal/estado").then(e => {
     $("#fiscalPasos").innerHTML = e.pasos.map(p => `<div class="fpaso ${p.ok ? "ok" : p.obligatorio ? "no" : "op"}"><span class="ic">${p.ok ? "✓" : p.obligatorio ? "✕" : "○"}</span>
       <div><b>${esc(p.titulo)}</b>${p.obligatorio ? "" : " <span class='muted'>(opcional)</span>"}${p.detalle ? `<small>${esc(p.detalle)}</small>` : ""}</div>
-      ${!p.ok ? `<button type="button" class="btn sm" data-act="cfgTab" data-t="${FISCAL_IR[p.id] || "fiscal"}">Ir</button>` : ""}</div>`).join("") +
+      ${!p.ok ? `<button type="button" class="btn sm" data-act="ir" data-v="${FISCAL_IR[p.id] || "cfg-fiscal"}">Ir</button>` : ""}</div>`).join("") +
       `<div class="small ${e.listo ? "" : "muted"}">${e.listo ? (e.activo ? "Modo fiscal activo." : "Todo listo: ya puede activar el modo fiscal.") : "Complete los pasos marcados con ✕ y guarde para poder activarlo."}</div>`;
   }).catch(() => {});
 }
 function initConfig() {
-  const f = $("#v-config form"), c = S.config;
-  cfgTab(S.cfgTab || "general");
+  const f = $("#cfgForm"), c = S.config;
   for (const k of ["negocio_nombre", "rif", "direccion", "telefono", "ticket_pie", "tasa_bcv"]) f.elements[k].value = c[k] ?? "";
   f.elements.tema.value = c.tema || "oscuro";
   f.elements.ganancia_default.value = c.ganancia_default ?? "30";
@@ -2100,7 +2101,7 @@ function initConfig() {
   // Los contadores de documentos avanzan en el servidor: se refrescan solo esos campos (sin tocar lo que el usuario esté editando).
   api("GET", "/api/config").then(n => {
     S.config = Object.assign({}, S.config, {sig_factura: n.sig_factura, sig_proforma: n.sig_proforma, sig_nota: n.sig_nota, sig_control: n.sig_control, sig_nota_credito: n.sig_nota_credito, sig_nota_debito: n.sig_nota_debito});
-    if (S.vista === "config") for (const k of ["sig_factura", "sig_proforma", "sig_nota", "sig_control", "sig_nota_credito", "sig_nota_debito"]) if (document.activeElement !== f.elements[k]) f.elements[k].value = n[k];
+    if (S.vista.startsWith("cfg-")) for (const k of ["sig_factura", "sig_proforma", "sig_nota", "sig_control", "sig_nota_credito", "sig_nota_debito"]) if (document.activeElement !== f.elements[k]) f.elements[k].value = n[k];
   }).catch(() => {});
 }
 function pintarLogo() { const i = $("#cfgLogo"); i.hidden = !S.logoTmp; if (S.logoTmp) i.src = S.logoTmp; }
@@ -2751,12 +2752,12 @@ document.addEventListener("submit", e => {
 
 /* ============================== acciones (click) ============================== */
 const ACT = {
-  ir: el => { const v = el.dataset.v, sub = $("#sub-" + v); if (sub && S.vista === v) setSub(v, !sub.classList.contains("open")); else ir(v); },
+  ir: el => { const v = el.dataset.v, sub = $("#sub-" + v), dentro = (VISTAS.find(x => x[0] === S.vista) || [])[4] === v; if (sub && (S.vista === v || dentro)) setSub(v, !sub.classList.contains("open")); else ir(v); },
   salir: () => cerrarSesion(),
   tema: () => { const oscuro = !document.documentElement.classList.contains("dark"); sessionStorage.setItem("mv_tema", oscuro ? "oscuro" : "claro"); aplicarTema(); },
   cerrarModal, cerrarTicket, imprimir: () => window.print(),
   contacto: () => abrirContacto(), cerrarContacto,
-  cfgTab: el => cfgTab(el.dataset.t), updBuscar: () => buscarActualizacion(true), updInstalar: () => instalarActualizacion(),
+  updBuscar: () => buscarActualizacion(true), updInstalar: () => instalarActualizacion(),
   updCopiar: () => copiarTexto((S.upd && S.upd.pagina) || ""),
   docFactura: el => { cerrarTicket(); docDeVenta("factura", +el.dataset.id); },
   docNota: el => { cerrarTicket(); docDeVenta("nota_entrega", +el.dataset.id); },
@@ -2970,7 +2971,7 @@ document.addEventListener("input", e => {
   }
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Enter" && e.target.closest && e.target.closest('[data-tabp="bitacora"]')) { e.preventDefault(); cargarBitacora(false); }
+  if (e.key === "Enter" && e.target.closest && e.target.closest('#v-bitacora')) { e.preventDefault(); cargarBitacora(false); }
 });
 document.addEventListener("change", e => {
   if (e.target.name === "control_modo") $("#cfgSerie").hidden = e.target.value !== "serie";
