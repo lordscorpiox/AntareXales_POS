@@ -3,6 +3,18 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.12
+Segunda entrega de la adecuación fiscal: **corregir sin borrar y dejar rastro**. Con el modo fiscal apagado todo funciona como antes (las notas y la bitácora están disponibles siempre).
+- **Notas de crédito y de débito** (Documentos › botones en cada factura emitida): una factura emitida no se edita, se corrige con una nota.
+  - *Crédito*: acredita total o parcialmente líneas de la factura (a la tasa de la factura, sin diferencias de centavos; lo ya acreditado no se puede repetir). Opciones: devolver la mercancía al inventario (almacén y lote reales de la venta), devolver efectivo USD/Bs como retiro de caja, o reducir la deuda del cliente. Devuelve también la parte proporcional del IGTF cobrado.
+  - *Débito*: cargos adicionales (fletes, intereses, ajustes) con su alícuota, a la tasa del día.
+  - Numeración propia (NC-000001 / ND-000001, configurable), número de control como en las facturas (manual o serie propia) y copia de los datos del emisor en modo fiscal. Piden clave de administrador. Aparecen en Documentos y en el resumen de Reportes.
+- **Facturas inmutables**: en modo fiscal una factura emitida no se anula ni se edita (tampoco su venta); se corrige con notas. Una opción en Fiscal permite anular (exige motivo). Una factura con notas no se puede anular, y las notas no se anulan. La base de datos lo refuerza: no se pueden borrar documentos ni sus líneas, ni modificar los montos de un documento fiscal.
+- **Motivo de anulación** de ventas y documentos (obligatorio en modo fiscal).
+- **Bitácora de auditoría** (Configuración › Bitácora, solo administrador): registra quién hizo qué y cuándo —inicios de sesión (y fallidos), anulaciones, documentos emitidos, cambios de configuración (valor anterior → nuevo), usuarios, abonos eliminados, ajustes de stock, mermas, conteos, compras anuladas, cierres de caja, restauraciones…—. Solo se agrega: la base de datos impide modificarla o borrarla. Con filtros y paginación.
+- Migración automática de la tabla de documentos (conserva todo); pruebas nuevas en `tests/`.
+- Pendiente (0.13): libros de ventas/compras, contingencia, respaldo externo y alertas.
+
 ## 0.11
 Base del **modo fiscal** (primera de tres entregas de adecuación al SENIAT). **Viene desactivado**: con el modo fiscal apagado la aplicación se comporta exactamente como en la 0.10. Todo es configurable por el comercio; los porcentajes y reglas son parámetros que conviene confirmar con su contador.
 - **Pestaña Configuración › Fiscal** con un **asistente de activación**: lista qué falta (razón social, RIF válido, domicilio fiscal, IVA activo, número de control) con un botón «Ir» a donde corregirlo. El modo fiscal no se puede activar —ni dejar incompleto— mientras falte algo obligatorio.

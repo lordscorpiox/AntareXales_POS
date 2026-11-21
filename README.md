@@ -55,8 +55,12 @@ El botón 🖼 junto al buscador de Ventas muestra u oculta las fotos (vista com
 - Número de control: se escribe al facturar (imprenta digital / máquina fiscal) o se genera desde una serie propia con rango.
 - Los porcentajes (IVA reducido/adicional, IGTF) son parámetros: confírmelos con su contador. Esta versión es la base; las facturas inmutables, las notas de crédito/débito y los libros llegan en las versiones 0.12 y 0.13.
 
+## Notas de crédito/débito, inmutabilidad y bitácora (v0.12)
+- En *Documentos*, cada factura emitida tiene «Nota de crédito» y «Nota de débito». Una factura emitida no se edita; con el modo fiscal activo tampoco se anula (salvo que se permita en *Fiscal*, con motivo).
+- *Configuración › Bitácora* (administrador): registro de auditoría que solo se agrega.
+
 ## Pruebas
-`bash tests/run_all.sh` ejecuta las pruebas de API; `tests/e2e_fiscal.py`, `e2e8.py` y `e2e10.py` usan Playwright (levantan `tests/run_server.py`; `e2e8`/`e2e10` esperan el puerto 5000).
+`bash tests/run_all.sh` ejecuta las pruebas de API; `tests/e2e_fiscal.py`, `e2e_v012.py`, `e2e8.py` y `e2e10.py` usan Playwright (levantan `tests/run_server.py`; `e2e8`/`e2e10` esperan el puerto 5000).
 
 ## Caja, compras e inventario avanzado (v0.5)
 - **Caja**: abra su turno con el fondo inicial al empezar; al cerrar, cuente el efectivo (Bs y USD) y el sistema muestra faltante/sobrante e imprime el reporte de cierre. Gastos y retiros de caja entran en el cálculo. *Configuración › Caja obligatoria* exige turno abierto para cobrar.

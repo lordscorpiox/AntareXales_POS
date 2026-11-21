@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -154,7 +155,7 @@ CREATE TABLE IF NOT EXISTS producto_imagenes (
 
 CREATE TABLE IF NOT EXISTS documentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL CHECK (tipo IN ('factura','proforma','nota_entrega')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('factura','proforma','nota_entrega','nota_credito','nota_debito')),
     numero INTEGER NOT NULL,
     fecha TEXT NOT NULL,
     venta_id INTEGER REFERENCES ventas(id) ON DELETE SET NULL,
@@ -207,6 +208,19 @@ CREATE TABLE IF NOT EXISTS documento_items (
     total_bs REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ix_docitems_doc ON documento_items(documento_id);
+
+-- v0.12: bitácora de auditoría (solo se agrega; los triggers de init_db impiden modificarla o borrarla)
+CREATE TABLE IF NOT EXISTS bitacora (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL,
+    usuario TEXT NOT NULL DEFAULT '',
+    accion TEXT NOT NULL,
+    entidad TEXT NOT NULL DEFAULT '',
+    entidad_id INTEGER,
+    detalle TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_bitacora_fecha ON bitacora(fecha);
+CREATE INDEX IF NOT EXISTS ix_bitacora_entidad ON bitacora(entidad, entidad_id);
 
 CREATE TABLE IF NOT EXISTS clientes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -529,6 +543,10 @@ DEFAULT_CONFIG = {
     "sig_control": "1",
     "control_hasta": "0",          # 0 = sin tope
     "fiscal_exige_cliente": "0",
+    # v0.12: notas de crédito/débito e inmutabilidad
+    "sig_nota_credito": "1",
+    "sig_nota_debito": "1",
+    "fiscal_permite_anular": "0",   # 1 = una factura fiscal emitida se puede anular (con motivo) en lugar de exigir nota de crédito
 }
 
 # Columnas agregadas después de la primera versión: (tabla, columna, definición).
@@ -591,7 +609,68 @@ MIGRACIONES = [
     ("documentos", "emisor_rif", "TEXT NOT NULL DEFAULT ''"),
     ("documentos", "emisor_direccion", "TEXT NOT NULL DEFAULT ''"),
     ("documentos", "emisor_telefono", "TEXT NOT NULL DEFAULT ''"),
+    # v0.12: notas de crédito/débito (documento afectado y motivo) y motivo de anulación
+    ("documentos", "doc_ref_id", "INTEGER"),
+    ("documentos", "motivo", "TEXT NOT NULL DEFAULT ''"),
+    ("documentos", "anulado_motivo", "TEXT NOT NULL DEFAULT ''"),
+    ("documento_items", "item_ref_id", "INTEGER"),
+    ("ventas", "anulada_motivo", "TEXT NOT NULL DEFAULT ''"),
 ]
+
+
+def migrar_documentos_v012(conn):
+    """Las notas de crédito/débito necesitan ampliar el CHECK de «tipo»: SQLite obliga a reconstruir la tabla.
+    Conserva todos los datos y se hace una sola vez (idempotente)."""
+    fila = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='documentos'").fetchone()
+    if not fila or "'nota_credito'" in fila[0]:
+        return
+    ddl = re.sub(r"CREATE TABLE (IF NOT EXISTS )?\"?documentos\"?", "CREATE TABLE documentos_nuevo", fila[0], count=1)
+    ddl = ddl.replace("'nota_entrega')", "'nota_entrega','nota_credito','nota_debito')", 1)
+    if "'nota_credito'" not in ddl or "documentos_nuevo" not in ddl:
+        raise RuntimeError("No se pudo preparar la migración de documentos")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=OFF")   # sin esto, DROP TABLE borraría en cascada las líneas de los documentos
+    try:
+        conn.execute("BEGIN")
+        conn.execute(ddl)
+        cols = ", ".join(r[1] for r in conn.execute("PRAGMA table_info(documentos)"))
+        conn.execute(f"INSERT INTO documentos_nuevo({cols}) SELECT {cols} FROM documentos")
+        conn.execute("DROP TABLE documentos")
+        conn.execute("ALTER TABLE documentos_nuevo RENAME TO documentos")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
+TRIGGERS = [
+    # La bitácora solo se agrega.
+    """CREATE TRIGGER IF NOT EXISTS trg_bitacora_no_upd BEFORE UPDATE ON bitacora
+       BEGIN SELECT RAISE(ABORT, 'La bitácora no se puede modificar'); END""",
+    """CREATE TRIGGER IF NOT EXISTS trg_bitacora_no_del BEFORE DELETE ON bitacora
+       BEGIN SELECT RAISE(ABORT, 'La bitácora no se puede borrar'); END""",
+    # Los documentos emitidos no se borran ni se editan: se corrigen con notas de crédito/débito.
+    """CREATE TRIGGER IF NOT EXISTS trg_documentos_no_del BEFORE DELETE ON documentos
+       BEGIN SELECT RAISE(ABORT, 'Los documentos emitidos no se pueden borrar'); END""",
+    """CREATE TRIGGER IF NOT EXISTS trg_docitems_no_del BEFORE DELETE ON documento_items
+       BEGIN SELECT RAISE(ABORT, 'Las líneas de un documento emitido no se pueden borrar'); END""",
+    """CREATE TRIGGER IF NOT EXISTS trg_docitems_no_upd BEFORE UPDATE ON documento_items
+       BEGIN SELECT RAISE(ABORT, 'Las líneas de un documento emitido no se pueden modificar'); END""",
+    """CREATE TRIGGER IF NOT EXISTS trg_documentos_fiscal_no_upd
+       BEFORE UPDATE OF tipo, numero, fecha, tasa, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, total_usd,
+                        base_bs, exento_bs, iva_bs, total_bs, control, cli_nombre, cli_rif, cli_direccion,
+                        igtf_pct, igtf_base_usd, igtf_usd, igtf_bs, emisor_nombre, emisor_rif, emisor_direccion,
+                        doc_ref_id, motivo ON documentos
+       WHEN OLD.fiscal = 1
+       BEGIN SELECT RAISE(ABORT, 'Un documento fiscal emitido no se puede modificar'); END""",
+]
+
+
+def crear_triggers(conn):
+    for t in TRIGGERS:
+        conn.execute(t)
 
 
 def migrar_esquema(conn):
@@ -621,6 +700,9 @@ def init_db():
     try:
         conn.executescript(SCHEMA)
         migrar_esquema(conn)
+        migrar_documentos_v012(conn)
+        conn.executescript(SCHEMA)   # recrea los índices de «documentos» si la tabla se reconstruyó
+        crear_triggers(conn)
         migrar_datos_v05(conn)
         # Sal única por instalación (viaja con el respaldo, así los usuarios siguen válidos).
         row = conn.execute("SELECT valor FROM config WHERE clave='salt'").fetchone()

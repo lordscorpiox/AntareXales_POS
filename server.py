@@ -3,6 +3,7 @@ import logging
 import math
 import os
 import re
+import sys
 import secrets
 import sqlite3
 import threading
@@ -305,7 +306,7 @@ def tasa_vigente(conn, data, cfg=None):
 
 # Rutas que solo puede usar el administrador (inventario avanzado, compras, almacenes...)
 SOLO_ADMIN = ("/api/usuarios", "/api/backup", "/api/actualizacion", "/api/almacenes", "/api/traslados", "/api/compras", "/api/proveedores",
-              "/api/conteos", "/api/mermas", "/api/vencimientos", "/api/kardex", "/api/reportes")
+              "/api/conteos", "/api/mermas", "/api/vencimientos", "/api/kardex", "/api/reportes", "/api/bitacora")
 
 
 def cajero_restringido(path, metodo):
@@ -391,6 +392,100 @@ def ping():
 
 
 # --------------------------------------------------------------------------- auth
+# --------------------------------------------------------------------------- bitácora (v0.12)
+# Registro de auditoría: quién hizo qué y cuándo. Solo se agrega (triggers en database.py). Toda operación que modifica
+# datos queda registrada automáticamente; los manejadores añaden el detalle útil en g.audit_detalle (motivo, números...).
+SIN_BITACORA = {("POST", "/api/ventas"), ("POST", "/api/ventas-espera"), ("DELETE", "/api/ventas-espera/<int:eid>"),
+                ("POST", "/api/auth/logout"), ("POST", "/api/auth/login"), ("POST", "/api/actualizacion/buscar")}
+_SECRETOS = ("password", "clave", "autoriza", "actual", "nueva", "token")
+ACCIONES = {
+    ("POST", "/api/ventas/<int:vid>/anular"): "anulación de venta",
+    ("POST", "/api/documentos"): "emisión de documento",
+    ("POST", "/api/documentos/<int:did>/anular"): "anulación de documento",
+    ("PUT", "/api/config"): "cambio de configuración",
+    ("POST", "/api/usuarios"): "usuario creado", ("PUT", "/api/usuarios/<int:uid>"): "usuario modificado",
+    ("DELETE", "/api/usuarios/<int:uid>"): "usuario eliminado", ("POST", "/api/auth/cambiar-clave"): "cambio de contraseña",
+    ("DELETE", "/api/clientes/<int:cid>/abonos/<int:aid>"): "abono eliminado", ("DELETE", "/api/clientes/<int:cid>/abonos"): "abonos eliminados",
+    ("POST", "/api/clientes/<int:cid>/abonos"): "abono registrado",
+    ("DELETE", "/api/productos/<int:pid>"): "producto eliminado", ("PATCH", "/api/productos/<int:pid>/stock"): "ajuste de stock",
+    ("POST", "/api/backup/restore-db"): "restauración de la base de datos", ("DELETE", "/api/caja/movimientos/<int:mid>"): "movimiento de caja anulado",
+    ("POST", "/api/compras/<int:cid>/anular"): "anulación de compra", ("POST", "/api/mermas"): "merma registrada",
+    ("POST", "/api/conteos/<int:cid>/aplicar"): "conteo físico aplicado", ("POST", "/api/caja/abrir"): "apertura de caja",
+    ("POST", "/api/caja/cerrar"): "cierre de caja", ("POST", "/api/caja/turnos/<int:tid>/cerrar"): "cierre de caja",
+}
+
+
+def auditar(conn, accion, entidad="", entidad_id=None, detalle="", usuario=None):
+    """Agrega una línea a la bitácora y confirma. Solo para usarse fuera de una transacción abierta."""
+    if usuario is None:
+        usuario = g.user["usuario"] if getattr(g, "user", None) else ""
+    conn.execute("INSERT INTO bitacora(fecha, usuario, accion, entidad, entidad_id, detalle) VALUES(?,?,?,?,?,?)",
+                 (db.now_str(), usuario, accion, entidad, entidad_id, str(detalle)[:600]))
+    conn.commit()
+
+
+def _resumen_cuerpo():
+    d = request.get_json(silent=True)
+    if not isinstance(d, dict):
+        return ""
+    partes = []
+    for k, v in d.items():
+        if any(x in k.lower() for x in _SECRETOS):
+            continue
+        if isinstance(v, (list, dict)):
+            partes.append(f"{k}=[{len(v)}]")
+        elif v not in (None, ""):
+            partes.append(f"{k}={str(v)[:60]}")
+    return ", ".join(partes)[:400]
+
+
+@app.after_request
+def _bitacora_auto(resp):
+    try:
+        if (request.method in ("POST", "PUT", "PATCH", "DELETE") and request.path.startswith("/api/") and request.url_rule
+                and resp.status_code < 400 and getattr(g, "user", None)):
+            clave = (request.method, request.url_rule.rule)
+            if clave in SIN_BITACORA:
+                return resp
+            accion = ACCIONES.get(clave) or f"{request.method} {request.url_rule.rule}"
+            entidad = request.path.split("/")[2] if request.path.count("/") >= 2 else ""
+            eid = next((v for v in (request.view_args or {}).values() if isinstance(v, int)), None)
+            if eid is None and request.method == "POST":
+                j = resp.get_json(silent=True)
+                if isinstance(j, dict) and isinstance(j.get("data"), dict) and isinstance(j["data"].get("id"), int):
+                    eid = j["data"]["id"]
+            detalle = getattr(g, "audit_detalle", None) or _resumen_cuerpo()
+            conn = get_db()
+            conn.execute("INSERT INTO bitacora(fecha, usuario, accion, entidad, entidad_id, detalle) VALUES(?,?,?,?,?,?)",
+                         (db.now_str(), g.user["usuario"], accion, entidad, eid, detalle[:600]))
+            conn.commit()
+    except Exception as e:   # la auditoría nunca debe tumbar la respuesta, pero el fallo queda a la vista en el registro
+        print("AVISO: no se pudo escribir la bitácora:", e, file=sys.stderr)
+    return resp
+
+
+@app.get("/api/bitacora")
+def bitacora_get():
+    conn = get_db()
+    sql, params = " FROM bitacora WHERE 1=1", []
+    desde, hasta = validar_fecha(request.args.get("desde"), "Desde"), validar_fecha(request.args.get("hasta"), "Hasta")
+    if desde:
+        sql += " AND date(fecha) >= ?"; params.append(desde)
+    if hasta:
+        sql += " AND date(fecha) <= ?"; params.append(hasta)
+    u = (request.args.get("usuario") or "").strip()
+    if u:
+        sql += " AND usuario = ?"; params.append(u)
+    q = (request.args.get("q") or "").strip()
+    if q:
+        sql += " AND (accion LIKE ? OR detalle LIKE ? OR entidad LIKE ?)"; params += [f"%{q}%"] * 3
+    total = conn.execute("SELECT COUNT(*)" + sql, params).fetchone()[0]
+    limite = min(int_arg("limit") or 100, 500)
+    desplaza = max(int_arg("offset") or 0, 0)
+    filas = rows(conn.execute("SELECT *" + sql + " ORDER BY id DESC LIMIT ? OFFSET ?", params + [limite, desplaza]))
+    return ok({"total": total, "items": filas})
+
+
 @app.post("/api/auth/login")
 def login():
     data = body()
@@ -400,7 +495,9 @@ def login():
     fila = verificar_credenciales(conn, usuario, password)
     if not fila:
         time.sleep(0.4)
+        auditar(conn, "inicio de sesión fallido", "usuario", None, "", usuario=usuario)
         raise ApiError("Usuario o contraseña incorrectos", 401)
+    auditar(conn, "inicio de sesión", "usuario", fila["id"], "", usuario=fila["usuario"])
     token, expira = crear_sesion(fila)
     return ok({
         "token": token,
@@ -492,7 +589,7 @@ def config_put():
             if str(v) not in ("incluido", "adicional"):
                 raise ApiError("El modo de IVA debe ser 'incluido' o 'adicional'")
             nuevos[k] = str(v)
-        elif k in ("fiscal_activo", "igtf_activo", "control_obligatorio", "fiscal_exige_cliente"):
+        elif k in ("fiscal_activo", "igtf_activo", "control_obligatorio", "fiscal_exige_cliente", "fiscal_permite_anular"):
             nuevos[k] = "1" if str(v).lower() in ("1", "true", "si", "sí") else "0"
         elif k == "fiscal_razon_social":
             nuevos[k] = texto(v, "La razón social", False, 120)
@@ -534,7 +631,7 @@ def config_put():
             if n > 365:
                 raise ApiError("La validez de la proforma no puede pasar de 365 días")
             nuevos[k] = str(n)
-        elif k in ("sig_factura", "sig_proforma", "sig_nota"):
+        elif k in ("sig_factura", "sig_proforma", "sig_nota", "sig_nota_credito", "sig_nota_debito"):
             n = num(v, "El próximo número", 1, default=1.0)
             if n != int(n) or n > 99999999:
                 raise ApiError("El próximo número debe ser un entero positivo")
@@ -552,13 +649,16 @@ def config_put():
             nuevos[k] = v
         else:
             nuevos[k] = texto(v, k, False, 300)
-    resultante = {**get_config(conn), **nuevos}
+    resultante_antes = get_config(conn)
+    resultante = {**resultante_antes, **nuevos}
     if resultante.get("fiscal_activo") == "1":
         est = fiscal.estado(resultante)
         if not est["listo"]:
             faltan = "; ".join(f"{p['titulo']}" + (f" ({p['detalle']})" if p["detalle"] else "")
                                for p in est["pasos"] if p["obligatorio"] and not p["ok"])
             raise ApiError("No se puede activar el modo fiscal todavía. Falta: " + faltan)
+    cambios = [f"{k}: {resultante_antes.get(k, '')!r} → {v!r}" for k, v in nuevos.items() if resultante_antes.get(k) != v]
+    g.audit_detalle = "; ".join(cambios)[:600] if cambios else "sin cambios"
     with conn:
         for k, v in nuevos.items():
             conn.execute("INSERT INTO config(clave, valor) VALUES(?,?) "
@@ -1585,6 +1685,14 @@ def ventas_anular(vid):
             raise ApiError("Venta no encontrada", 404)
         if v["estado"] == "anulada":
             raise ApiError("La venta ya está anulada")
+        cfg = get_config(conn)
+        fisc = conn.execute("SELECT numero FROM documentos WHERE venta_id=? AND tipo='factura' AND estado='emitido' AND fiscal=1", (vid,)).fetchone()
+        if fisc and cfg.get("fiscal_permite_anular") != "1":
+            raise ApiError(f"La venta tiene la factura fiscal N° {fisc['numero']:08d}: no se anula, se corrige con una nota de crédito "
+                           "(Documentos › Nota de crédito)", 409)
+        if conn.execute("SELECT 1 FROM documentos WHERE venta_id=? AND tipo='nota_credito' AND estado='emitido'", (vid,)).fetchone():
+            raise ApiError("La venta tiene notas de crédito emitidas: no se puede anular", 409)
+        motivo = texto(data.get("motivo"), "El motivo de la anulación", cfg.get("fiscal_activo") == "1", 200)
         turno = conn.execute("SELECT estado FROM turnos WHERE id=?", (v["turno_id"],)).fetchone() if v["turno_id"] else None
         if data.get("devolver_efectivo") and (turno is None or turno["estado"] == "cerrado"):
             neto = efectivo_neto_venta(conn, vid)
@@ -1611,11 +1719,13 @@ def ventas_anular(vid):
                              "cantidad": it["cantidad"]}]
             consumos = [c for c in consumos if conn.execute("SELECT 1 FROM productos WHERE id=?", (c["producto_id"],)).fetchone()]
             stk.restituir(conn, consumos, "anulación", f"Anulación venta #{vid}", g.user["usuario"], vid)
-        conn.execute("UPDATE ventas SET estado='anulada', anulada_fecha=?, anulada_por=? WHERE id=?",
-                     (db.now_str(), quien, vid))
-        conn.execute("UPDATE documentos SET estado='anulado', anulado_fecha=?, anulado_por=? "
+        conn.execute("UPDATE ventas SET estado='anulada', anulada_fecha=?, anulada_por=?, anulada_motivo=? WHERE id=?",
+                     (db.now_str(), quien, motivo, vid))
+        conn.execute("UPDATE documentos SET estado='anulado', anulado_fecha=?, anulado_por=?, anulado_motivo=? "
                      "WHERE venta_id=? AND estado='emitido' AND tipo IN ('factura','nota_entrega')",
-                     (db.now_str(), quien, vid))
+                     (db.now_str(), quien, motivo, vid))
+        g.audit_detalle = f"venta #{vid} · total ${v['total_usd']:.2f}" + (f" · motivo: {motivo}" if motivo else "") + \
+                          (f" · autorizó {autoriza}" if autoriza != g.user["usuario"] else "")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1627,7 +1737,8 @@ def ventas_anular(vid):
 
 # --------------------------------------------------------------------------- documentos
 # Facturas y notas de entrega se generan a partir de una venta; las proformas, desde el carrito (no mueven stock).
-TIPOS_DOC = {"factura": "sig_factura", "proforma": "sig_proforma", "nota_entrega": "sig_nota"}
+TIPOS_DOC = {"factura": "sig_factura", "proforma": "sig_proforma", "nota_entrega": "sig_nota",
+             "nota_credito": "sig_nota_credito", "nota_debito": "sig_nota_debito"}
 
 
 def doc_out(conn, did, con_items=True):
@@ -1642,6 +1753,14 @@ def doc_out(conn, did, con_items=True):
             d["vence"] = ""
     if con_items:
         d["items"] = rows(conn.execute("SELECT * FROM documento_items WHERE documento_id=? ORDER BY id", (did,)))
+        if d["tipo"] == "factura":   # cuánto de cada línea ya se acreditó con notas de crédito (para la pantalla de notas)
+            for it in d["items"]:
+                it["acreditado"] = round(_acreditado(conn, it["id"])["cant"], 6)
+            d["notas_emitidas"] = rows(conn.execute("SELECT id, tipo, numero, total_usd FROM documentos WHERE doc_ref_id=? AND estado='emitido' "
+                                           "ORDER BY id", (did,)))
+    if d.get("doc_ref_id"):
+        r = conn.execute("SELECT numero, fecha, control, tipo FROM documentos WHERE id=?", (d["doc_ref_id"],)).fetchone()
+        d["ref"] = dict(r) if r else None
     return d
 
 
@@ -1688,14 +1807,50 @@ def items_de_lineas(lineas):
              "total_bs": l["total_bs"]} for l in lineas]
 
 
+DOC_CON_CONTROL = ("factura", "nota_credito", "nota_debito")
+EMISOR_VACIO = {"nombre": "", "rif": "", "direccion": "", "telefono": ""}
+
+
+def preparar_fiscal(conn, cfg, tipo, cli, control_in, exigir_cliente=True):
+    """Modo fiscal: valida al cliente, asigna (serie propia) o valida (manual) el número de control y devuelve (control, emisor)."""
+    control = texto(control_in, "El número de control", False, 40)
+    if exigir_cliente and cfg.get("fiscal_exige_cliente") == "1":
+        if cli["nombre"] == "Consumidor final" or not cli["rif"]:
+            raise ApiError("El documento necesita el nombre y el RIF o cédula del cliente")
+    if cli["rif"] and not fiscal.validar_id_cliente(cli["rif"]):
+        raise ApiError("El RIF o cédula del cliente no tiene un formato válido (ej.: V-12345678 o J-12345678-9)")
+    if cfg.get("control_modo") == "serie":
+        sc = int(float(cfg.get("sig_control") or 1))
+        hasta = int(float(cfg.get("control_hasta") or 0))
+        if hasta and sc > hasta:
+            raise ApiError("Se agotó el rango de números de control autorizado: configure uno nuevo en Fiscal")
+        control = fiscal.formatear_control(cfg, sc)
+        conn.execute("INSERT INTO config(clave, valor) VALUES('sig_control',?) "
+                     "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (str(sc + 1),))
+    elif cfg.get("control_obligatorio", "1") == "1" and not control:
+        raise ApiError("Escriba el número de control (lo asigna su imprenta digital o máquina fiscal)")
+    if control:
+        if not fiscal.RE_CONTROL.match(control):
+            raise ApiError("El número de control solo admite letras, números y guion")
+        if conn.execute("SELECT 1 FROM documentos WHERE tipo IN ('factura','nota_credito','nota_debito') AND control=?",
+                        (control,)).fetchone():
+            raise ApiError(f"El número de control {control} ya fue usado en otro documento")
+    emisor = {"nombre": (cfg.get("fiscal_razon_social") or cfg.get("negocio_nombre") or ""),
+              "rif": fiscal.validar_rif(cfg.get("rif"))["normalizado"], "direccion": cfg.get("direccion") or "",
+              "telefono": cfg.get("telefono") or ""}
+    return control, emisor
+
+
 @app.post("/api/documentos")
 def documentos_post():
     data = body()
     tipo = str(data.get("tipo") or "")
     if tipo not in TIPOS_DOC:
-        raise ApiError("Tipo de documento no válido (factura, proforma o nota_entrega)")
+        raise ApiError("Tipo de documento no válido (factura, proforma, nota_entrega, nota_credito o nota_debito)")
     conn = get_db()
     cfg = get_config(conn)
+    if tipo in ("nota_credito", "nota_debito"):
+        return nota_post(conn, cfg, data, tipo)
     try:
         conn.execute("BEGIN IMMEDIATE")
         venta = None
@@ -1742,32 +1897,9 @@ def documentos_post():
             igtf = {"pct": venta["igtf_pct"], "base": venta["igtf_base_usd"], "usd": venta["igtf_usd"], "bs": venta["igtf_bs"]}
         cli = datos_cliente_doc(conn, data, cliente_id)
         es_fiscal = cfg.get("fiscal_activo") == "1" and tipo == "factura"
-        control = texto(data.get("control"), "El número de control", False, 40) if tipo == "factura" else ""
-        emisor = {"nombre": "", "rif": "", "direccion": "", "telefono": ""}
-        if es_fiscal:
-            if cfg.get("fiscal_exige_cliente") == "1":
-                if cli["nombre"] == "Consumidor final" or not cli["rif"]:
-                    raise ApiError("La factura necesita el nombre y el RIF o cédula del cliente")
-            if cli["rif"] and not fiscal.validar_id_cliente(cli["rif"]):
-                raise ApiError("El RIF o cédula del cliente no tiene un formato válido (ej.: V-12345678 o J-12345678-9)")
-            if cfg.get("control_modo") == "serie":
-                sc = int(float(cfg.get("sig_control") or 1))
-                hasta = int(float(cfg.get("control_hasta") or 0))
-                if hasta and sc > hasta:
-                    raise ApiError("Se agotó el rango de números de control autorizado: configure uno nuevo en Fiscal")
-                control = fiscal.formatear_control(cfg, sc)
-                conn.execute("INSERT INTO config(clave, valor) VALUES('sig_control',?) "
-                             "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (str(sc + 1),))
-            elif cfg.get("control_obligatorio", "1") == "1" and not control:
-                raise ApiError("Escriba el número de control de la factura (lo asigna su imprenta digital o máquina fiscal)")
-            if control:
-                if not fiscal.RE_CONTROL.match(control):
-                    raise ApiError("El número de control solo admite letras, números y guion")
-                if conn.execute("SELECT 1 FROM documentos WHERE tipo='factura' AND control=?", (control,)).fetchone():
-                    raise ApiError(f"El número de control {control} ya fue usado en otra factura")
-            emisor = {"nombre": (cfg.get("fiscal_razon_social") or cfg.get("negocio_nombre") or ""),
-                      "rif": fiscal.validar_rif(cfg.get("rif"))["normalizado"], "direccion": cfg.get("direccion") or "",
-                      "telefono": cfg.get("telefono") or ""}
+        control, emisor = preparar_fiscal(conn, cfg, tipo, cli, data.get("control")) if es_fiscal else ("", dict(EMISOR_VACIO))
+        if tipo == "factura" and not es_fiscal:
+            control = texto(data.get("control"), "El número de control", False, 40)
         clave = TIPOS_DOC[tipo]
         sig = int(float(cfg.get(clave) or 1))
         ultimo = conn.execute("SELECT COALESCE(MAX(numero),0) FROM documentos WHERE tipo=?", (tipo,)).fetchone()[0]
@@ -1799,14 +1931,233 @@ def documentos_post():
     except Exception:
         conn.rollback()
         raise
+    g.audit_detalle = f"{tipo} N° {numero}" + (f" · control {control}" if control else "") + f" · total ${tot['total_usd']:.2f}"
     return ok(doc_out(conn, did), 201)
+
+
+# --------------------------------------------------------------------------- notas de crédito y débito (v0.12)
+# Una factura emitida no se edita: se corrige con una nota de crédito (devolución, descuento, error) o de débito (cargos
+# adicionales). Cada nota apunta a su factura, lleva su propio número (y número de control en modo fiscal) y queda en la bitácora.
+REEMBOLSOS = ("ninguno", "efectivo_usd", "efectivo_bs", "deuda")
+
+
+def _acreditado(conn, item_id):
+    """Cantidad y montos ya acreditados de una línea de factura por notas de crédito vigentes."""
+    return conn.execute(
+        "SELECT COALESCE(SUM(i.cantidad),0) cant, COALESCE(SUM(i.base_usd),0) base_usd, COALESCE(SUM(i.iva_usd),0) iva_usd, "
+        "COALESCE(SUM(i.base_bs),0) base_bs, COALESCE(SUM(i.iva_bs),0) iva_bs, COALESCE(SUM(i.total_usd),0) total_usd, "
+        "COALESCE(SUM(i.total_bs),0) total_bs FROM documento_items i JOIN documentos d ON d.id=i.documento_id "
+        "WHERE i.item_ref_id=? AND d.tipo='nota_credito' AND d.estado='emitido'", (item_id,)).fetchone()
+
+
+def _lineas_credito(conn, f, data):
+    pedidas = data.get("items")
+    if not isinstance(pedidas, list) or not pedidas:
+        raise ApiError("Indique las líneas de la factura que se acreditan")
+    if len(pedidas) > 200:
+        raise ApiError("Demasiadas líneas")
+    vistos, out = set(), []
+    for pi in pedidas:
+        if not isinstance(pi, dict):
+            raise ApiError("Línea no válida")
+        try:
+            iid = int(pi.get("item_id"))
+        except (TypeError, ValueError):
+            raise ApiError("Línea no válida")
+        if iid in vistos:
+            raise ApiError("Una línea de la factura solo puede aparecer una vez en la nota")
+        vistos.add(iid)
+        o = conn.execute("SELECT * FROM documento_items WHERE id=? AND documento_id=?", (iid, f["id"])).fetchone()
+        if not o:
+            raise ApiError("Una de las líneas no pertenece a la factura", 404)
+        cant = num(pi.get("cantidad"), "La cantidad", estricto_positivo=True)
+        ya = _acreditado(conn, iid)
+        queda = round(o["cantidad"] - ya["cant"], 6)
+        if cant > queda + 1e-9:
+            raise ApiError(f"«{o['nombre']}»: solo se puede acreditar {qty_txt(queda)} (el resto ya fue acreditado)")
+        if o["unidad"] == "und" and cant != int(cant):
+            raise ApiError(f"«{o['nombre']}» se vende por unidad: la cantidad debe ser entera")
+        if cant >= queda - 1e-9:   # lo que reste, exacto: así la suma de notas nunca pasa de la factura
+            cols = {c: round(o[c] - ya[c], 2) for c in ("base_usd", "iva_usd", "base_bs", "iva_bs", "total_usd", "total_bs")}
+            cant = queda
+        else:
+            r = cant / o["cantidad"]
+            cols = {c: r2(o[c] * r) for c in ("base_usd", "iva_usd", "base_bs", "iva_bs", "total_usd", "total_bs")}
+        out.append({"item_ref_id": iid, "producto_id": o["producto_id"], "codigo": o["codigo"], "nombre": o["nombre"],
+                    "unidad": o["unidad"], "cantidad": cant, "exento": o["exento"], "iva_pct": o["iva_pct"],
+                    "precio_usd": o["precio_usd"], "precio_bs": o["precio_bs"], **cols})
+    return out
+
+
+def qty_txt(x):
+    return f"{x:g}"
+
+
+def _lineas_debito(conn, cfg, f, data, tasa):
+    pedidas = data.get("items")
+    if not isinstance(pedidas, list) or not pedidas:
+        raise ApiError("Agregue al menos un cargo a la nota de débito")
+    if len(pedidas) > 50:
+        raise ApiError("Demasiadas líneas")
+    tasas = fiscal.tasas_iva(cfg)
+    con_iva = bool(f["iva_modo"])
+    out = []
+    for pi in pedidas:
+        if not isinstance(pi, dict):
+            raise ApiError("Línea no válida")
+        desc = texto(pi.get("descripcion"), "La descripción del cargo", True, 120)
+        base = r2(num(pi.get("monto_usd"), "El monto del cargo", estricto_positivo=True))
+        if base > 1e9:
+            raise ApiError("Monto demasiado grande")
+        alic = str(pi.get("alicuota") or "general")
+        if alic not in fiscal.ALICUOTAS:
+            raise ApiError("Alícuota no válida")
+        exento = 1 if (con_iva and alic == "exento") else 0
+        pct = tasas[alic] if (con_iva and not exento) else 0.0
+        iva = r2(base * pct / 100.0)
+        base_bs, iva_bs = r2(base * tasa), r2(iva * tasa)
+        out.append({"item_ref_id": None, "producto_id": None, "codigo": "", "nombre": desc, "unidad": "und", "cantidad": 1.0,
+                    "exento": exento, "iva_pct": pct, "precio_usd": base, "precio_bs": base_bs, "base_usd": base, "iva_usd": iva,
+                    "base_bs": base_bs, "iva_bs": iva_bs, "total_usd": r2(base + iva), "total_bs": r2(base_bs + iva_bs)})
+    return out
+
+
+def _devolver_stock(conn, f, lineas, usuario, motivo):
+    """Devuelve al inventario lo acreditado: usa los consumos reales de la venta (almacén y lote) cuando existen."""
+    principal = stk.almacen_principal(conn)
+    no_devueltos = []
+    for l in lineas:
+        if l["producto_id"] is None:
+            continue
+        prod = conn.execute("SELECT id, tipo FROM productos WHERE id=?", (l["producto_id"],)).fetchone()
+        if not prod:
+            continue
+        vi = conn.execute("SELECT id, cantidad FROM venta_items WHERE venta_id=? AND producto_id=? ORDER BY id LIMIT 1",
+                          (f["venta_id"], l["producto_id"])).fetchone() if f["venta_id"] else None
+        consumos = rows(conn.execute("SELECT * FROM venta_consumos WHERE venta_item_id=?", (vi["id"],))) if vi else []
+        if consumos and vi["cantidad"] > 0:
+            r = min(1.0, l["cantidad"] / vi["cantidad"])
+            esc = [{**c, "cantidad": round(c["cantidad"] * r, 4)} for c in consumos]
+            esc = [c for c in esc if c["cantidad"] > 0 and conn.execute("SELECT 1 FROM productos WHERE id=?", (c["producto_id"],)).fetchone()]
+            stk.restituir(conn, esc, "devolución", motivo, usuario, f["venta_id"])
+        elif prod["tipo"] == "simple":
+            stk.mover(conn, prod["id"], principal, l["cantidad"], "devolución", motivo, usuario, f["venta_id"])
+        else:
+            no_devueltos.append(l["nombre"])
+    return no_devueltos
+
+
+def nota_post(conn, cfg, data, tipo):
+    autoriza = autorizar_admin(conn, data)
+    quien = g.user["usuario"] if autoriza == g.user["usuario"] else f"{g.user['usuario']} (autorizó {autoriza})"
+    try:
+        ref_id = int(data.get("doc_ref_id"))
+    except (TypeError, ValueError):
+        raise ApiError("Indique la factura que modifica la nota")
+    motivo = texto(data.get("motivo"), "El motivo de la nota", True, 200)
+    reembolso = str(data.get("reembolso") or "ninguno")
+    if reembolso not in REEMBOLSOS:
+        raise ApiError("Forma de reembolso no válida")
+    if tipo == "nota_debito" and reembolso != "ninguno":
+        raise ApiError("La nota de débito no lleva reembolso")
+    es_fiscal = cfg.get("fiscal_activo") == "1"
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        f = conn.execute("SELECT * FROM documentos WHERE id=?", (ref_id,)).fetchone()
+        if not f or f["tipo"] != "factura":
+            raise ApiError("La nota debe referirse a una factura existente", 404)
+        if f["estado"] != "emitido":
+            raise ApiError("La factura está anulada: no admite notas")
+        cli = {"nombre": f["cli_nombre"], "rif": f["cli_rif"], "direccion": f["cli_direccion"], "telefono": f["cli_telefono"]}
+        if tipo == "nota_credito":
+            tasa = f["tasa"]
+            lineas = _lineas_credito(conn, f, data)
+        else:
+            tasa = tasa_vigente(conn, data, cfg)
+            lineas = _lineas_debito(conn, cfg, f, data, tasa)
+        tot_usd = r2(sum(l["total_usd"] for l in lineas))
+        tot_bs = r2(sum(l["total_bs"] for l in lineas))
+        ex_usd = r2(sum(l["total_usd"] for l in lineas if l["exento"]))
+        ex_bs = r2(sum(l["total_bs"] for l in lineas if l["exento"]))
+        iva_usd, iva_bs = r2(sum(l["iva_usd"] for l in lineas)), r2(sum(l["iva_bs"] for l in lineas))
+        base_usd, base_bs = r2(tot_usd - iva_usd - ex_usd), r2(tot_bs - iva_bs - ex_bs)
+        # El IGTF cobrado en la factura se devuelve en la misma proporción que lo acreditado.
+        ig = {"pct": 0.0, "base": 0.0, "usd": 0.0, "bs": 0.0}
+        if tipo == "nota_credito" and f["igtf_usd"] > 0 and f["total_usd"] > 0:
+            rt = min(1.0, tot_usd / f["total_usd"])
+            ig = {"pct": f["igtf_pct"], "base": r2(f["igtf_base_usd"] * rt), "usd": r2(f["igtf_usd"] * rt), "bs": r2(f["igtf_bs"] * rt)}
+        control, emisor = (preparar_fiscal(conn, cfg, tipo, cli, data.get("control"), exigir_cliente=False)
+                           if es_fiscal else (texto(data.get("control"), "El número de control", False, 40), dict(EMISOR_VACIO)))
+        clave = TIPOS_DOC[tipo]
+        ultimo = conn.execute("SELECT COALESCE(MAX(numero),0) FROM documentos WHERE tipo=?", (tipo,)).fetchone()[0]
+        numero = max(int(float(cfg.get(clave) or 1)), ultimo + 1)
+        etiqueta = "NC" if tipo == "nota_credito" else "ND"
+        devuelve = ig["usd"] + tot_usd
+        # --- efectos de la nota de crédito
+        extra = ""
+        if tipo == "nota_credito":
+            if data.get("devolver_stock"):
+                sin = _devolver_stock(conn, f, lineas, quien, f"Nota de crédito {numero} (factura {f['numero']})")
+                extra += " Stock devuelto al inventario." + (f" No se pudo devolver: {', '.join(sin)}." if sin else "")
+            if reembolso in ("efectivo_usd", "efectivo_bs"):
+                tid = turno_actual(conn, g.user["user_id"])
+                if not tid:
+                    raise ApiError("Abra un turno de caja para registrar la devolución del efectivo", 409)
+                moneda, monto = ("USD", r2(devuelve)) if reembolso == "efectivo_usd" else ("BS", r2(tot_bs + ig["bs"]))
+                conn.execute("INSERT INTO caja_movimientos(turno_id, fecha, tipo, categoria, concepto, moneda, monto, usuario) "
+                             "VALUES(?,?,?,?,?,?,?,?)", (tid, db.now_str(), "retiro", "Devolución de venta",
+                                                         f"{etiqueta}-{numero:06d} sobre factura {f['numero']:08d}", moneda, monto, g.user["usuario"]))
+                extra += f" Efectivo devuelto: {monto:.2f} {moneda}."
+            elif reembolso == "deuda":
+                if not f["cliente_id"]:
+                    raise ApiError("La factura no tiene un cliente registrado: no hay deuda que reducir")
+                cli_row = cliente_por_id(conn, f["cliente_id"])
+                if cli_row["saldo_usd"] + TOLERANCIA_USD < devuelve:
+                    raise ApiError(f"La deuda actual del cliente (${max(cli_row['saldo_usd'], 0):.2f}) es menor que la nota "
+                                   f"(${devuelve:.2f}): elija otra forma de reembolso")
+                conn.execute("INSERT INTO abonos(cliente_id, fecha, monto_usd, moneda, monto_bs, tasa, metodo, referencia, turno_id) "
+                             "VALUES(?,?,?,?,?,?,?,?,NULL)", (f["cliente_id"], db.now_str(), r2(devuelve), "USD", 0.0, 0.0,
+                                                              "nota_credito", f"{etiqueta}-{numero:06d}"))
+                extra += " Deuda del cliente reducida."
+        notas = texto(data.get("notas"), "Las observaciones", False, 300)
+        cur = conn.execute(
+            "INSERT INTO documentos(tipo, numero, fecha, venta_id, cliente_id, cli_nombre, cli_rif, cli_direccion, cli_telefono, "
+            "tasa, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, total_usd, base_bs, exento_bs, iva_bs, total_bs, control, "
+            "notas, validez_dias, mostrar_precios, creado_por, igtf_pct, igtf_base_usd, igtf_usd, igtf_bs, fiscal, "
+            "emisor_nombre, emisor_rif, emisor_direccion, emisor_telefono, doc_ref_id, motivo) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (tipo, numero, db.now_str(), f["venta_id"], f["cliente_id"], cli["nombre"], cli["rif"], cli["direccion"], cli["telefono"],
+             tasa, f["iva_pct"], f["iva_modo"], base_usd, ex_usd, iva_usd, tot_usd, base_bs, ex_bs, iva_bs, tot_bs, control,
+             (notas + (" · " if notas else "") + f"Reembolso: {reembolso.replace('_', ' ')}") if tipo == "nota_credito" else notas,
+             quien, ig["pct"], ig["base"], ig["usd"], ig["bs"], 1 if es_fiscal else 0,
+             emisor["nombre"], emisor["rif"], emisor["direccion"], emisor["telefono"], f["id"], motivo))
+        did = cur.lastrowid
+        for l in lineas:
+            conn.execute(
+                "INSERT INTO documento_items(documento_id, producto_id, codigo, nombre, unidad, cantidad, precio_usd, precio_bs, "
+                "exento, iva_pct, base_usd, iva_usd, base_bs, iva_bs, total_usd, total_bs, item_ref_id) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (did, l["producto_id"], l["codigo"], l["nombre"], l["unidad"], l["cantidad"], l["precio_usd"], l["precio_bs"],
+                 l["exento"], l["iva_pct"], l["base_usd"], l["iva_usd"], l["base_bs"], l["iva_bs"], l["total_usd"], l["total_bs"],
+                 l["item_ref_id"]))
+        conn.execute("INSERT INTO config(clave, valor) VALUES(?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
+                     (clave, str(numero + 1)))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    g.audit_detalle = (f"{tipo} N° {numero}" + (f" · control {control}" if control else "") + f" sobre factura N° {f['numero']} · total ${tot_usd:.2f} · motivo: {motivo}" +
+                       (f" · autorizó {autoriza}" if autoriza != g.user["usuario"] else "") + extra)[:600]
+    out = doc_out(conn, did)
+    out["aviso"] = extra.strip()
+    return ok(out, 201)
 
 
 @app.get("/api/documentos")
 def documentos_get():
     conn = get_db()
     sql = ("SELECT id, tipo, numero, fecha, venta_id, cliente_id, cli_nombre, cli_rif, total_usd, total_bs, iva_usd, estado, "
-           "control, creado_por, validez_dias FROM documentos WHERE 1=1")
+           "control, creado_por, validez_dias, fiscal, doc_ref_id, motivo FROM documentos WHERE 1=1")
     params = []
     tipo = (request.args.get("tipo") or "").strip()
     if tipo:
@@ -1849,13 +2200,25 @@ def documentos_detalle(did):
 def documentos_anular(did):
     if not es_admin():
         raise ApiError("Solo el administrador puede anular documentos", 403)
+    data = request.get_json(silent=True) or {}
     conn = get_db()
+    cfg = get_config(conn)
     d = doc_out(conn, did, con_items=False)
     if d["estado"] == "anulado":
         raise ApiError("El documento ya está anulado")
+    if d["tipo"] in ("nota_credito", "nota_debito"):
+        raise ApiError("Una nota de crédito o de débito no se anula: corríjala emitiendo la nota contraria", 409)
+    if d["tipo"] == "factura":
+        notas = conn.execute("SELECT COUNT(*) FROM documentos WHERE doc_ref_id=? AND estado='emitido'", (did,)).fetchone()[0]
+        if notas:
+            raise ApiError("La factura tiene notas de crédito/débito emitidas: no se puede anular", 409)
+    if d["fiscal"] and cfg.get("fiscal_permite_anular") != "1":
+        raise ApiError("Un documento fiscal emitido no se anula: emita una nota de crédito (Documentos › Nota de crédito)", 409)
+    motivo = texto(data.get("motivo"), "El motivo de la anulación", bool(d["fiscal"]), 200)
     with conn:
-        conn.execute("UPDATE documentos SET estado='anulado', anulado_fecha=?, anulado_por=? WHERE id=?",
-                     (db.now_str(), g.user["usuario"], did))
+        conn.execute("UPDATE documentos SET estado='anulado', anulado_fecha=?, anulado_por=?, anulado_motivo=? WHERE id=?",
+                     (db.now_str(), g.user["usuario"], motivo, did))
+    g.audit_detalle = f"{d['tipo']} N° {d['numero']}" + (f" · control {d['control']}" if d["control"] else "") + (f" · motivo: {motivo}" if motivo else "")
     return ok(doc_out(conn, did))
 
 
@@ -2138,6 +2501,10 @@ def reportes_resumen():
         extra["mermas_usd"] = r2(conn.execute(
             "SELECT COALESCE(SUM(ABS(cantidad)*costo_usd),0) FROM movimientos_stock WHERE tipo='merma' AND date(fecha) BETWEEN ? AND ?",
             rango).fetchone()[0])
+    for tipo_n, pref in (("nota_credito", "notas_credito"), ("nota_debito", "notas_debito")):
+        nt = conn.execute("SELECT COUNT(*), COALESCE(SUM(total_usd+igtf_usd),0), COALESCE(SUM(total_bs+igtf_bs),0) FROM documentos "
+                          "WHERE tipo=? AND estado='emitido' AND date(fecha) BETWEEN ? AND ?", (tipo_n, *rango)).fetchone()
+        extra[pref + "_n"], extra[pref + "_usd"], extra[pref + "_bs"] = nt[0], r2(nt[1]), r2(nt[2])
     n = t["n"]
     return ok({
         **extra,

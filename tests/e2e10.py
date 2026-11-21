@@ -34,7 +34,7 @@ with sync_playwright() as p:
     pg.goto("http://127.0.0.1:5000/"); pg.fill("[name=usuario]", "admin"); pg.fill("[name=password]", "admin123"); pg.click("#login button[type=submit]"); pg.wait_for_selector("#v-ventas.on")
     pg.click("#nav [data-v=config]"); pg.wait_for_selector("#v-config.on")
     tabs = pg.eval_on_selector_all("#cfgTabs button", "bs=>bs.map(b=>b.textContent)")
-    ok(tabs == ["General", "Ventas e inventario", "Impuestos y documentos", "Fiscal", "Actualizaciones", "Acerca de"], f"pestañas: {tabs}")
+    ok(tabs == ["General", "Ventas e inventario", "Impuestos y documentos", "Fiscal", "Bitácora", "Actualizaciones", "Acerca de"], f"pestañas: {tabs}")
     def visibles(): return pg.eval_on_selector_all("#cfgForm .tabp", "ps=>ps.filter(p=>!p.hidden).map(p=>p.dataset.tabp)")
     ok(visibles() == ["general"] and pg.is_visible("[name=negocio_nombre]") and not pg.is_visible("[name=iva_pct]"), "abre en «General»; lo demás está oculto")
     pg.screenshot(path=OUT + "/v10_cfg_general.png")

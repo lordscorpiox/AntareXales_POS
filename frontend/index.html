@@ -585,7 +585,7 @@ table.tbl{width:100%;border-collapse:collapse}
       <section id="v-documentos" class="view">
         <div class="card sec">
           <div class="bar" style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-            <select id="dTipo"><option value="">Todos los documentos</option><option value="factura">Facturas</option><option value="proforma">Proformas</option><option value="nota_entrega">Notas de entrega</option></select>
+            <select id="dTipo"><option value="">Todos los documentos</option><option value="factura">Facturas</option><option value="proforma">Proformas</option><option value="nota_entrega">Notas de entrega</option><option value="nota_credito">Notas de crédito</option><option value="nota_debito">Notas de débito</option></select>
             <select id="dEstado"><option value="">Todos los estados</option><option value="emitido">Emitidos</option><option value="anulado">Anulados</option></select>
             <input id="dSearch" type="search" placeholder="Buscar por cliente, RIF o número" autocomplete="off" style="flex:1;min-width:200px">
             <label class="small muted">Desde <input id="dDesde" type="date"></label>
@@ -604,6 +604,7 @@ table.tbl{width:100%;border-collapse:collapse}
           <button type="button" role="tab" data-act="cfgTab" data-t="ventas">Ventas e inventario</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="impuestos">Impuestos y documentos</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="fiscal" id="cfgTabFiscal">Fiscal</button>
+          <button type="button" role="tab" data-act="cfgTab" data-t="bitacora" id="cfgTabBit">Bitácora</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="actualizaciones">Actualizaciones</button>
           <button type="button" role="tab" data-act="cfgTab" data-t="acerca">Acerca de</button>
         </div>
@@ -657,6 +658,9 @@ table.tbl{width:100%;border-collapse:collapse}
             <div class="field"><label>Próxima proforma Nº</label><input name="sig_proforma" type="number" min="1" step="1"></div>
             <div class="field"><label>Próxima nota de entrega Nº</label><input name="sig_nota" type="number" min="1" step="1"></div></div>
           <div class="grid2">
+            <div class="field"><label>Próxima nota de crédito Nº</label><input name="sig_nota_credito" type="number" min="1" step="1"></div>
+            <div class="field"><label>Próxima nota de débito Nº</label><input name="sig_nota_debito" type="number" min="1" step="1"></div></div>
+          <div class="grid2">
             <div class="field"><label>Validez de la proforma (días)</label><input name="proforma_validez" type="number" min="1" max="365" step="1"></div>
             <div class="field"><label>Texto al pie de los documentos</label><input name="doc_pie" placeholder="Condiciones de pago, datos bancarios…"></div></div>
           </div>
@@ -676,10 +680,22 @@ table.tbl{width:100%;border-collapse:collapse}
             <div class="field"><label>Próximo número</label><input name="sig_control" type="number" min="1" step="1"></div>
             <div class="field"><label>Último número autorizado (0 = sin tope)</label><input name="control_hasta" type="number" min="0" step="1"></div></div>
           <label class="chk"><input type="checkbox" name="fiscal_exige_cliente"> Exigir nombre y RIF / cédula del cliente en cada factura</label>
+          <label class="chk"><input type="checkbox" name="fiscal_permite_anular"> Permitir anular facturas fiscales (no recomendado: lo normal es corregirlas con una nota de crédito; la anulación exige motivo)</label>
           <h3 class="sec-h">IGTF (pagos en divisas)</h3>
           <label class="chk"><input type="checkbox" name="igtf_activo"> Cobrar IGTF sobre lo pagado en divisas</label>
           <div class="grid2"><div class="field"><label>Alícuota IGTF (%)</label><input name="igtf_pct" type="number" step="any" min="0" max="100"><div class="hint">Confirme el porcentaje vigente con su contador.</div></div>
             <div class="field"><label>Métodos de pago sujetos a IGTF</label><div id="igtfMetodos" style="display:grid;gap:4px"></div></div></div>
+          </div>
+          <div class="tabp" data-tabp="bitacora" hidden>
+          <h3>Bitácora de auditoría</h3>
+          <div class="hint">Registro de quién hizo qué y cuándo (anulaciones, documentos, cambios de configuración, usuarios...). Solo se agrega: no se puede editar ni borrar.</div>
+          <div class="row" style="gap:8px;flex-wrap:wrap;margin:8px 0">
+            <label class="small muted">Desde <input id="bDesde" type="date"></label><label class="small muted">Hasta <input id="bHasta" type="date"></label>
+            <input id="bUsuario" placeholder="Usuario" style="width:130px"><input id="bQ" type="search" placeholder="Buscar acción o detalle" style="flex:1;min-width:160px">
+            <button type="button" class="btn" data-act="bitBuscar">Buscar</button></div>
+          <div class="tbl-wrap" style="max-height:420px"><table class="tbl"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody id="bitBody"></tbody></table></div>
+          <div class="small muted" id="bitInfo" style="margin-top:6px"></div>
+          <button type="button" class="btn sm" data-act="bitMas" id="bitMas" hidden>Cargar más</button>
           </div>
           <div class="tabp" data-tabp="actualizaciones" hidden>
           <h3>Actualizaciones</h3>
@@ -1660,22 +1676,25 @@ const cargarHistorial = safe(async () => {
 const verTicketVenta = safe(async id => mostrarTicket(await api("GET", `/api/ventas/${id}`)));
 
 /* ============================== DOCUMENTOS (factura, proforma, nota de entrega) ============================== */
-const DOC_TIPOS = {factura: ["Factura", "FACTURA"], proforma: ["Proforma", "PROFORMA"], nota_entrega: ["Nota de entrega", "NOTA DE ENTREGA"]};
-const docNum = d => d.tipo === "factura" ? String(d.numero).padStart(8, "0") : (d.tipo === "proforma" ? "PF-" : "NE-") + String(d.numero).padStart(6, "0");
+const DOC_TIPOS = {factura: ["Factura", "FACTURA"], proforma: ["Proforma", "PROFORMA"], nota_entrega: ["Nota de entrega", "NOTA DE ENTREGA"],
+  nota_credito: ["Nota de crédito", "NOTA DE CRÉDITO"], nota_debito: ["Nota de débito", "NOTA DE DÉBITO"]};
+const docNum = d => d.tipo === "factura" ? String(d.numero).padStart(8, "0") :
+  ({proforma: "PF-", nota_entrega: "NE-", nota_credito: "NC-", nota_debito: "ND-"}[d.tipo]) + String(d.numero).padStart(6, "0");
 function initDocumentos() { cargarDocumentos(); }
 const cargarDocumentos = safe(async () => {
   const q = new URLSearchParams();
   for (const [k, id] of [["tipo", "#dTipo"], ["estado", "#dEstado"], ["q", "#dSearch"], ["desde", "#dDesde"], ["hasta", "#dHasta"]]) { const v = $(id).value.trim(); if (v) q.set(k, v); }
   const lista = await api("GET", "/api/documentos?" + q);
   $("#dBody").innerHTML = lista.length ? lista.map(d => `<tr class="${d.estado === "anulado" ? "void" : ""}">
-    <td><span class="badge ${d.tipo === "factura" ? "ok" : d.tipo === "proforma" ? "warn" : "gray"}">${DOC_TIPOS[d.tipo][0]}</span></td>
+    <td><span class="badge ${d.tipo === "factura" ? "ok" : d.tipo === "proforma" ? "warn" : d.tipo === "nota_credito" ? "bad" : d.tipo === "nota_debito" ? "warn" : "gray"}">${DOC_TIPOS[d.tipo][0]}</span>${d.fiscal ? ' <span class="small muted" title="Documento fiscal">●</span>' : ""}</td>
     <td class="nowrap"><b>${docNum(d)}</b>${d.control ? `<div class="small muted">Control ${esc(d.control)}</div>` : ""}</td><td class="nowrap">${fmtFecha(d.fecha)}</td>
     <td>${esc(d.cli_nombre)}${d.cli_rif ? `<div class="small muted">${esc(d.cli_rif)}</div>` : ""}</td>
     <td class="right">${bsf(d.total_bs)}</td><td class="right">${usd(d.total_usd)}</td>
     <td>${d.estado === "anulado" ? '<span class="badge bad">Anulado</span>' : '<span class="badge ok">Emitido</span>'}</td>
     <td class="act"><button class="btn sm" data-act="verDoc" data-id="${d.id}">🖨 Ver / Imprimir</button>
       ${d.tipo === "proforma" && d.estado === "emitido" ? `<button class="btn sm" data-act="proformaAlCarrito" data-id="${d.id}">Al carrito</button>` : ""}
-      ${esAdmin() && d.estado === "emitido" ? `<button class="btn sm danger" data-act="anularDoc" data-id="${d.id}">Anular</button>` : ""}</td></tr>`).join("")
+      ${d.tipo === "factura" && d.estado === "emitido" ? `<button class="btn sm" data-act="notaCredito" data-id="${d.id}">Nota de crédito</button><button class="btn sm" data-act="notaDebito" data-id="${d.id}">Nota de débito</button>` : ""}
+      ${esAdmin() && d.estado === "emitido" && !d.tipo.startsWith("nota_c") && d.tipo !== "nota_debito" && !(d.fiscal && S.config.fiscal_permite_anular !== "1") ? `<button class="btn sm danger" data-act="anularDoc" data-id="${d.id}">Anular</button>` : ""}</td></tr>`).join("")
     : `<tr><td colspan="8" class="empty">Sin documentos</td></tr>`;
 });
 function docHtml(d) {
@@ -1695,12 +1714,12 @@ function docHtml(d) {
     const fila = (t, bs, us, cls = "") => `<tr class="${cls}"><td>${t}</td><td class="r">${bsf(bs)}</td><td class="r">${usd(us)}</td></tr>`;
     const grupos = ivaPorAlicuota(d.items), conIgtf = d.igtf_usd > 0;
     tot = `<table class="tots">${iva ? fila("Base imponible", d.base_bs, d.base_usd) + (d.exento_usd > 0 || d.exento_bs > 0 ? fila("Monto exento (E)", d.exento_bs, d.exento_usd) : "") +
-      (grupos.length ? grupos : [{pct: d.iva_pct, ivaBs: d.iva_bs, ivaUsd: d.iva_usd}]).map(x => fila(`IVA ${f2(x.pct)}%`, x.ivaBs, x.ivaUsd)).join("") : ""}${fila(conIgtf ? "TOTAL FACTURA" : "TOTAL", d.total_bs, d.total_usd, conIgtf ? "" : "tt")}${
-      conIgtf ? fila(`IGTF ${f2(d.igtf_pct)}% sobre ${usd(d.igtf_base_usd)} pagados en divisas`, d.igtf_bs, d.igtf_usd) + fila("TOTAL A PAGAR", r2(d.total_bs + d.igtf_bs), r2(d.total_usd + d.igtf_usd), "tt") : ""}</table>
+      (grupos.length ? grupos : [{pct: d.iva_pct, ivaBs: d.iva_bs, ivaUsd: d.iva_usd}]).map(x => fila(`IVA ${f2(x.pct)}%`, x.ivaBs, x.ivaUsd)).join("") : ""}${fila(conIgtf ? (d.tipo === "nota_credito" ? "TOTAL NOTA" : "TOTAL FACTURA") : "TOTAL", d.total_bs, d.total_usd, conIgtf ? "" : "tt")}${
+      conIgtf ? fila(`IGTF ${f2(d.igtf_pct)}% sobre ${usd(d.igtf_base_usd)} ${d.tipo === "nota_credito" ? "acreditados" : "pagados en divisas"}`, d.igtf_bs, d.igtf_usd) + fila(d.tipo === "nota_credito" ? "TOTAL A DEVOLVER" : "TOTAL A PAGAR", r2(d.total_bs + d.igtf_bs), r2(d.total_usd + d.igtf_usd), "tt") : ""}</table>
       <div class="small" style="text-align:right;margin-top:3px">Tasa BCV: ${f2(d.tasa)} Bs/USD${iva ? " · Precios unitarios y totales por línea sin IVA" : ""}</div>`;
   }
   const meta = [`<div class="nro">Nº ${docNum(d)}</div>`];
-  if (d.tipo === "factura" && d.control) meta.push(`<div>Nº de control: <b>${esc(d.control)}</b></div>`);
+  if (["factura", "nota_credito", "nota_debito"].includes(d.tipo) && d.control) meta.push(`<div>Nº de control: <b>${esc(d.control)}</b></div>`);
   meta.push(`<div>Fecha: ${fmtFecha(d.fecha).slice(0, 10)}</div>`);
   if (d.tipo === "proforma" && d.vence) meta.push(`<div>Válida hasta: <b>${fmtFecha(d.vence).slice(0, 10)}</b></div>`);
   if (d.venta_id) meta.push(`<div class="small">Venta #${d.venta_id}</div>`);
@@ -1713,11 +1732,66 @@ function docHtml(d) {
       <div class="f"><b>Dirección:</b> ${esc(d.cli_direccion) || "—"}</div>${d.cli_telefono ? `<div><b>Teléfono:</b> ${esc(d.cli_telefono)}</div>` : ""}</div>
     <table class="it"><thead>${cab}</thead><tbody>${filas}</tbody></table>
     ${tot}
+    ${d.ref ? `<div class="obs"><b>Modifica la factura Nº ${String(d.ref.numero).padStart(8, "0")}</b> del ${fmtFecha(d.ref.fecha).slice(0, 10)}${d.ref.control ? ` (control ${esc(d.ref.control)})` : ""}.<br><b>Motivo:</b> ${esc(d.motivo)}</div>` : ""}
     ${d.notas ? `<div class="obs"><b>Observaciones:</b> ${esc(d.notas)}</div>` : ""}
+    ${d.estado === "anulado" && d.anulado_motivo ? `<div class="obs"><b>Motivo de la anulación:</b> ${esc(d.anulado_motivo)}</div>` : ""}
+    ${d.notas_emitidas && d.notas_emitidas.length ? `<div class="obs small">Notas asociadas: ${d.notas_emitidas.map(n => (n.tipo === "nota_credito" ? "NC-" : "ND-") + String(n.numero).padStart(6, "0")).join(", ")}</div>` : ""}
     ${d.tipo === "proforma" ? `<div class="obs">Documento informativo sin validez fiscal. Los montos en Bs corresponden a la tasa indicada y pueden variar al concretar la venta.</div>` : ""}
     ${d.tipo === "nota_entrega" ? `<div class="firmas"><div>Entregado por</div><div>Recibido conforme (nombre, C.I. y firma)</div></div>` : ""}
     ${c.doc_pie ? `<div class="pie">${esc(c.doc_pie)}</div>` : ""}
   </div>`;
+}
+/* Notas de crédito y de débito: corrigen una factura emitida (que no se edita). Siempre piden clave de administrador. */
+const campoControl = () => {
+  if (!fiscalOn()) return `<div class="field"><label>Nº de control (opcional)</label><input data-x="control"></div>`;
+  if (S.config.control_modo === "serie") return `<div class="small muted">El número de control se asigna solo (serie propia).</div>`;
+  return `<div class="field"><label>Nº de control${S.config.control_obligatorio !== "0" ? " *" : " (opcional)"}</label><input data-x="control" placeholder="Lo asigna su imprenta digital o máquina fiscal"></div>`;
+};
+function notaCredito(f) {
+  if (f.estado !== "emitido") return toast("La factura está anulada", "warn");
+  const lineas = f.items.map(i => {
+    const queda = Math.round((i.cantidad - i.acreditado) * 1e6) / 1e6;
+    return `<tr><td>${esc(i.nombre)}</td><td class="r">${qty(i.cantidad)}</td><td class="r">${qty(i.acreditado)}</td>
+      <td class="r"><input data-q="${i.id}" type="number" min="0" max="${queda}" step="${i.unidad === "und" ? 1 : "any"}" value="0" ${queda <= 0 ? "disabled" : ""} style="width:80px"></td></tr>`;
+  }).join("");
+  const extraHtml = `<div class="tbl-wrap" style="max-height:220px"><table class="tbl"><thead><tr><th>Producto</th><th class="r">Facturado</th><th class="r">Ya acreditado</th><th class="r">Acreditar</th></tr></thead><tbody>${lineas}</tbody></table></div>
+    <div class="field"><label>Motivo *</label><input data-x="motivo" maxlength="200" placeholder="Ej.: devolución de mercancía"></div>
+    <div class="grid2"><div class="field"><label>Reembolso</label><select data-x="reembolso"><option value="ninguno">Ninguno (solo el documento)</option><option value="efectivo_usd">Devolver efectivo USD (retiro de caja)</option>
+      <option value="efectivo_bs">Devolver efectivo Bs (retiro de caja)</option><option value="deuda">Reducir la deuda del cliente</option></select></div>${campoControl()}</div>
+    <label class="chk"><input type="checkbox" data-x="stock" checked> Devolver la mercancía al inventario</label>`;
+  let nota = null;
+  autorizar({
+    titulo: `Nota de crédito sobre la factura ${docNum(f)}`, textoSi: "Emitir nota de crédito", extraHtml,
+    msg: "Acredita total o parcialmente la factura (a la tasa de la factura). La factura original no se modifica.",
+    ejecutar: async ({autoriza, extra: x}) => {
+      const items = $$("#authExtra [data-q]").map(i => ({item_id: +i.dataset.q, cantidad: +i.value || 0})).filter(i => i.cantidad > 0);
+      if (!items.length) throw new Error("Indique la cantidad a acreditar de al menos una línea.");
+      nota = await api("POST", "/api/documentos", {tipo: "nota_credito", doc_ref_id: f.id, motivo: x.motivo, reembolso: x.reembolso, control: x.control,
+        devolver_stock: !!x.stock, items, autoriza});
+    },
+  }).then(async h => {
+    if (!h || !nota) return;
+    await Promise.all([cargarProductos(), cargarClientes(), cargarTurno()]); cargarDocumentos();
+    toast(`Nota de crédito ${docNum(nota)} emitida.${nota.aviso ? " " + nota.aviso : ""}`, "ok"); mostrarDocumento(nota);
+  });
+}
+const ndFilaHtml = () => `<div class="grid3 ndf" style="align-items:end"><div class="field"><label>Cargo</label><input data-nd="descripcion" maxlength="120" placeholder="Ej.: flete"></div>
+  <div class="field"><label>Monto USD (sin IVA)</label><input data-nd="monto_usd" type="number" min="0" step="any"></div>
+  <div class="field"><label>Alícuota</label><select data-nd="alicuota">${["general", "reducida", "adicional", "exento"].map(a => `<option value="${a}">${ALIC_NOMBRE[a]}</option>`).join("")}</select></div></div>`;
+function notaDebito(f) {
+  if (f.estado !== "emitido") return toast("La factura está anulada", "warn");
+  const extraHtml = `<div id="ndFilas">${ndFilaHtml()}</div><button type="button" class="btn sm" data-act="ndFila">+ Agregar cargo</button>
+    <div class="field" style="margin-top:8px"><label>Motivo *</label><input data-x="motivo" maxlength="200" placeholder="Ej.: gastos de envío no incluidos"></div>${campoControl()}`;
+  let nota = null;
+  autorizar({
+    titulo: `Nota de débito sobre la factura ${docNum(f)}`, textoSi: "Emitir nota de débito", extraHtml,
+    msg: "Agrega cargos a la factura (intereses, fletes, ajustes). Los montos se escriben sin IVA; se usa la tasa BCV de hoy.",
+    ejecutar: async ({autoriza, extra: x}) => {
+      const items = $$("#ndFilas .ndf").map(r => ({descripcion: r.querySelector('[data-nd=descripcion]').value.trim(), monto_usd: +r.querySelector('[data-nd=monto_usd]').value || 0,
+        alicuota: r.querySelector('[data-nd=alicuota]').value})).filter(i => i.descripcion || i.monto_usd);
+      nota = await api("POST", "/api/documentos", {tipo: "nota_debito", doc_ref_id: f.id, motivo: x.motivo, control: x.control, items, autoriza, tasa: S.tasa});
+    },
+  }).then(h => { if (!h || !nota) return; cargarDocumentos(); toast(`Nota de débito ${docNum(nota)} emitida.`, "ok"); mostrarDocumento(nota); });
 }
 const mostrarDocumento = d => abrirImpresion(docHtml(d), "", "min(860px,100%)");
 const verDoc = safe(async id => mostrarDocumento(await api("GET", `/api/documentos/${id}`)));
@@ -1777,6 +1851,8 @@ const generarReporte = safe(async () => {
     <div class="kpi card"><div class="l">Ticket promedio</div><div class="v">${usd(r.ticket_promedio_usd)}</div><div class="small muted">${bsf(r.ticket_promedio_bs)}</div></div>
     <div class="kpi card"><div class="l">Crédito otorgado</div><div class="v">${usd(r.credito_usd)}</div></div>
     <div class="kpi card"><div class="l">Abonos cobrados</div><div class="v">${usd(r.abonos_usd)}</div></div>
+    ${r.notas_credito_n > 0 ? `<div class="kpi card"><div class="l">Notas de crédito</div><div class="v">−${usd(r.notas_credito_usd)}</div><div class="small muted">${r.notas_credito_n} nota(s)</div></div>` : ""}
+    ${r.notas_debito_n > 0 ? `<div class="kpi card"><div class="l">Notas de débito</div><div class="v">${usd(r.notas_debito_usd)}</div><div class="small muted">${r.notas_debito_n} nota(s)</div></div>` : ""}
     ${r.iva_usd > 0 ? `<div class="kpi card"><div class="l">IVA cobrado</div><div class="v">${usd(r.iva_usd)}</div><div class="small muted">${bsf(r.iva_bs)}</div></div>` : ""}
     <div class="kpi card"><div class="l">Por cobrar (total)</div><div class="v">${usd(r.por_cobrar_usd)}</div></div>
     ${r.gastos_usd > 0 || r.gastos_bs > 0 ? `<div class="kpi card"><div class="l">Gastos de caja</div><div class="v">${usd(r.gastos_usd)}</div>${r.gastos_bs > 0 ? `<div class="small muted">+ ${bsf(r.gastos_bs)}</div>` : ""}</div>` : ""}
@@ -1964,15 +2040,27 @@ const importarCsv = safe(async () => {
 });
 
 /* ============================== 8. CONFIGURACIÓN ============================== */
-const CFG_TABS = ["general", "ventas", "impuestos", "fiscal", "actualizaciones", "acerca"];
+const CFG_TABS = ["general", "ventas", "impuestos", "fiscal", "bitacora", "actualizaciones", "acerca"];
 function cfgTab(t) {
   if (!CFG_TABS.includes(t)) t = "general";
   S.cfgTab = t;
   $$("#cfgTabs button").forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
   $$("#cfgForm .tabp").forEach(p => { p.hidden = p.dataset.tabp !== t; });
-  $("#cfgPie").hidden = t === "acerca";   // «Acerca de» no tiene nada que guardar
+  $("#cfgPie").hidden = t === "acerca" || t === "bitacora";   // «Acerca de» y la bitácora no tienen nada que guardar
+  if (t === "bitacora") cargarBitacora(false);
 }
 const FISCAL_IR = {razon: "fiscal", rif: "general", domicilio: "general", iva: "impuestos", control: "fiscal", igtf: "fiscal"};
+const BIT = {pos: 0, total: 0};
+const cargarBitacora = safe(async (mas) => {
+  if (!mas) { BIT.pos = 0; $("#bitBody").innerHTML = ""; }
+  const q = new URLSearchParams({limit: "100", offset: String(BIT.pos)});
+  for (const [k, id] of [["desde", "#bDesde"], ["hasta", "#bHasta"], ["usuario", "#bUsuario"], ["q", "#bQ"]]) { const v = $(id).value.trim(); if (v) q.set(k, v); }
+  const r = await api("GET", "/api/bitacora?" + q);
+  BIT.total = r.total; BIT.pos += r.items.length;
+  $("#bitBody").insertAdjacentHTML("beforeend", r.items.map(b => `<tr><td class="nowrap">${fmtFecha(b.fecha)}</td><td>${esc(b.usuario)}</td><td>${esc(b.accion)}</td><td class="small">${esc(b.detalle)}</td></tr>`).join("") ||
+    (mas ? "" : `<tr><td colspan="4" class="empty">Sin registros</td></tr>`));
+  $("#bitInfo").textContent = `${BIT.pos} de ${BIT.total} registro(s)`; $("#bitMas").hidden = BIT.pos >= BIT.total;
+});
 function pintarFiscal() {
   $("#cfgTabFiscal").textContent = fiscalOn() ? "Fiscal ●" : "Fiscal";
   api("GET", "/api/fiscal/estado").then(e => {
@@ -1990,10 +2078,10 @@ function initConfig() {
   f.elements.ganancia_default.value = c.ganancia_default ?? "30";
   f.elements.permitir_stock_negativo.checked = c.permitir_stock_negativo === "1";
   f.elements.iva_activo.checked = c.iva_activo === "1";
-  for (const k of ["iva_pct", "iva_pct_reducida", "iva_pct_adicional", "sig_factura", "sig_proforma", "sig_nota", "proforma_validez", "doc_pie",
+  for (const k of ["iva_pct", "iva_pct_reducida", "iva_pct_adicional", "sig_factura", "sig_proforma", "sig_nota", "sig_nota_credito", "sig_nota_debito", "proforma_validez", "doc_pie",
     "fiscal_razon_social", "control_prefijo", "control_digitos", "sig_control", "control_hasta", "igtf_pct"]) f.elements[k].value = c[k] ?? "";
   f.elements.control_modo.value = c.control_modo || "manual";
-  for (const k of ["fiscal_activo", "control_obligatorio", "fiscal_exige_cliente", "igtf_activo"]) f.elements[k].checked = c[k] === "1";
+  for (const k of ["fiscal_activo", "control_obligatorio", "fiscal_exige_cliente", "igtf_activo", "fiscal_permite_anular"]) f.elements[k].checked = c[k] === "1";
   const igM = new Set(String(c.igtf_metodos || "").split(",").filter(Boolean));
   $("#igtfMetodos").innerHTML = Object.entries(METODOS).filter(([, m]) => m[1] === "USD").map(([k, m]) =>
     `<label class="chk"><input type="checkbox" data-igtf="${k}" ${igM.has(k) ? "checked" : ""}> ${esc(m[0])}</label>`).join("");
@@ -2011,8 +2099,8 @@ function initConfig() {
   S.logoTmp = c.logo || ""; pintarLogo();
   // Los contadores de documentos avanzan en el servidor: se refrescan solo esos campos (sin tocar lo que el usuario esté editando).
   api("GET", "/api/config").then(n => {
-    S.config = Object.assign({}, S.config, {sig_factura: n.sig_factura, sig_proforma: n.sig_proforma, sig_nota: n.sig_nota, sig_control: n.sig_control});
-    if (S.vista === "config") for (const k of ["sig_factura", "sig_proforma", "sig_nota", "sig_control"]) if (document.activeElement !== f.elements[k]) f.elements[k].value = n[k];
+    S.config = Object.assign({}, S.config, {sig_factura: n.sig_factura, sig_proforma: n.sig_proforma, sig_nota: n.sig_nota, sig_control: n.sig_control, sig_nota_credito: n.sig_nota_credito, sig_nota_debito: n.sig_nota_debito});
+    if (S.vista === "config") for (const k of ["sig_factura", "sig_proforma", "sig_nota", "sig_control", "sig_nota_credito", "sig_nota_debito"]) if (document.activeElement !== f.elements[k]) f.elements[k].value = n[k];
   }).catch(() => {});
 }
 function pintarLogo() { const i = $("#cfgLogo"); i.hidden = !S.logoTmp; if (S.logoTmp) i.src = S.logoTmp; }
@@ -2638,7 +2726,7 @@ const FORMS = {
       tasa_bcv: d.tasa_bcv, logo: S.logoTmp || "", tema: d.tema, ganancia_default: d.ganancia_default,
       permitir_stock_negativo: f.elements.permitir_stock_negativo.checked ? "1" : "0",
       iva_activo: f.elements.iva_activo.checked ? "1" : "0", iva_pct: d.iva_pct, iva_modo: d.iva_modo,
-      sig_factura: d.sig_factura, sig_proforma: d.sig_proforma, sig_nota: d.sig_nota, proforma_validez: d.proforma_validez, doc_pie: d.doc_pie,
+      sig_factura: d.sig_factura, sig_proforma: d.sig_proforma, sig_nota: d.sig_nota, sig_nota_credito: d.sig_nota_credito, sig_nota_debito: d.sig_nota_debito, proforma_validez: d.proforma_validez, doc_pie: d.doc_pie,
       almacen_ventas: d.almacen_ventas || "", dias_alerta_vencimiento: d.dias_alerta_vencimiento, caja_obligatoria: f.elements.caja_obligatoria.checked ? "1" : "0",
       cajero_cambia_tasa: f.elements.cajero_cambia_tasa.checked ? "1" : "0",
       actualizar_al_abrir: f.elements.actualizar_al_abrir.checked ? "1" : "0",
@@ -2646,7 +2734,7 @@ const FORMS = {
       fiscal_activo: f.elements.fiscal_activo.checked ? "1" : "0", fiscal_razon_social: d.fiscal_razon_social,
       control_modo: d.control_modo, control_obligatorio: f.elements.control_obligatorio.checked ? "1" : "0",
       control_prefijo: d.control_prefijo, control_digitos: d.control_digitos, sig_control: d.sig_control, control_hasta: d.control_hasta,
-      fiscal_exige_cliente: f.elements.fiscal_exige_cliente.checked ? "1" : "0",
+      fiscal_exige_cliente: f.elements.fiscal_exige_cliente.checked ? "1" : "0", fiscal_permite_anular: f.elements.fiscal_permite_anular.checked ? "1" : "0",
       igtf_activo: f.elements.igtf_activo.checked ? "1" : "0", igtf_pct: d.igtf_pct,
       igtf_metodos: $$("#igtfMetodos [data-igtf]").filter(x => x.checked).map(x => x.dataset.igtf).join(","),
     });
@@ -2676,9 +2764,18 @@ const ACT = {
   verDoc: el => verDoc(+el.dataset.id),
   proformaAlCarrito: el => proformaAlCarrito(+el.dataset.id),
   anularDoc: safe(async el => {
-    if (!await confirmar("¿Anular este documento?\nQuedará marcado como ANULADO (no se borra).", "Anular")) return;
-    await api("POST", `/api/documentos/${el.dataset.id}/anular`); cargarDocumentos(); toast("Documento anulado", "ok");
+    const id = +el.dataset.id;
+    await autorizar({
+      titulo: "Anular el documento", textoSi: "Anular", msg: "Quedará marcado como ANULADO (no se borra) y el motivo queda en la bitácora.",
+      extraHtml: `<div class="field"><label>Motivo${fiscalOn() ? " *" : ""}</label><input data-x="motivo" maxlength="200" placeholder="Ej.: error en los datos del cliente"></div>`,
+      ejecutar: async ({extra}) => { await api("POST", `/api/documentos/${id}/anular`, {motivo: extra.motivo}); },
+    }).then(h => { if (h) { cargarDocumentos(); toast("Documento anulado", "ok"); } });
   }),
+  notaCredito: safe(async el => notaCredito(await api("GET", `/api/documentos/${el.dataset.id}`))),
+  notaDebito: safe(async el => notaDebito(await api("GET", `/api/documentos/${el.dataset.id}`))),
+  ndFila: () => $("#ndFilas").insertAdjacentHTML("beforeend", ndFilaHtml()),
+  bitMas: () => cargarBitacora(true),
+  bitBuscar: () => cargarBitacora(false),
   elegirImg: () => $("#imgFile").click(),
   quitarImg: () => { S.imgTmp = null; $("#imgFile").value = ""; pintarPrevImg(); },
   vistaFotos: () => { fotosOn = !fotosOn; try { localStorage.setItem("av_fotos", fotosOn ? "1" : "0"); } catch (e) {} renderGrid(); },
@@ -2759,14 +2856,15 @@ const ACT = {
     const id = +el.dataset.id, v = await api("GET", `/api/ventas/${id}`);
     const efectivo = v.pagos.filter(p => p.metodo === "efectivo_usd" || p.metodo === "efectivo_bs").length > 0;
     const cerrado = v.turno_estado !== "abierto";   // turno cerrado (o venta sin turno): el efectivo ya salió del arqueo
-    const extra = efectivo && cerrado
-      ? `<label class="chk" style="margin-bottom:10px"><input type="checkbox" data-x="devolver" ${S.turno ? "checked" : "disabled"}> Devolví el efectivo al cliente: registrarlo como retiro en mi turno de caja${S.turno ? "" : " (abra su turno de caja para poder registrarlo)"}</label>` : "";
+    const campoMotivo = `<div class="field" style="margin-bottom:10px"><label>Motivo${fiscalOn() ? " *" : ""}</label><input data-x="motivo" maxlength="200" placeholder="Ej.: el cliente se arrepintió"></div>`;
+    const extra = campoMotivo + (efectivo && cerrado
+      ? `<label class="chk" style="margin-bottom:10px"><input type="checkbox" data-x="devolver" ${S.turno ? "checked" : "disabled"}> Devolví el efectivo al cliente: registrarlo como retiro en mi turno de caja${S.turno ? "" : " (abra su turno de caja para poder registrarlo)"}</label>` : "");
     let aviso = "";
     await autorizar({
       titulo: `Anular la venta #${id}`, textoSi: "Anular venta", extraHtml: extra,
       msg: "Se devolverá el stock y, si fue a crédito, se descuenta de la deuda del cliente.\nLa venta anulada no se borra: queda marcada como ANULADA.",
       ejecutar: async ({autoriza, extra: x}) => {
-        const r = await api("POST", `/api/ventas/${id}/anular`, {autoriza, devolver_efectivo: !!x.devolver});
+        const r = await api("POST", `/api/ventas/${id}/anular`, {autoriza, devolver_efectivo: !!x.devolver, motivo: x.motivo});
         const dv = r.devolucion || {}; aviso = Object.keys(dv).length ? " Devolución registrada: " + Object.entries(dv).map(([m, q]) => m === "USD" ? usd(q) : bsf(q)).join(" + ") + "." : "";
       },
     }).then(async hecho => { if (!hecho) return; await Promise.all([cargarProductos(), cargarClientes(), cargarTurno()]); cargarHistorial(); toast("Venta anulada." + aviso, "ok"); });
@@ -2870,6 +2968,9 @@ document.addEventListener("input", e => {
     const m = METODOS[S.pagos[i].metodo]; $(`[data-eq="${i}"]`).textContent = m[1] === "USD" ? "USD" : "Bs ≈ " + usd((+t.value || 0) / S.tasa);
     actualizarResumenPago();
   }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.closest && e.target.closest('[data-tabp="bitacora"]')) { e.preventDefault(); cargarBitacora(false); }
 });
 document.addEventListener("change", e => {
   if (e.target.name === "control_modo") $("#cfgSerie").hidden = e.target.value !== "serie";
