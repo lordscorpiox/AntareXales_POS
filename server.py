@@ -305,7 +305,7 @@ def tasa_vigente(conn, data, cfg=None):
 
 
 # Rutas que solo puede usar el administrador (inventario avanzado, compras, almacenes...)
-SOLO_ADMIN = ("/api/usuarios", "/api/backup", "/api/actualizacion", "/api/almacenes", "/api/traslados", "/api/compras", "/api/proveedores",
+SOLO_ADMIN = ("/api/usuarios", "/api/libros", "/api/backup", "/api/actualizacion", "/api/almacenes", "/api/traslados", "/api/compras", "/api/proveedores",
               "/api/conteos", "/api/mermas", "/api/vencimientos", "/api/kardex", "/api/reportes", "/api/bitacora")
 
 
@@ -638,6 +638,19 @@ def config_put():
             nuevos[k] = str(int(n))
         elif k == "doc_pie":
             nuevos[k] = texto(v, "El pie de los documentos", False, 300)
+        elif k in ("contingencia_desde", "respaldo_externo_ultimo"):
+            continue   # los lleva el servidor
+        elif k in ("contingencia_activa", "respaldo_externo_activo"):
+            nuevos[k] = "1" if str(v).lower() in ("1", "true", "si", "sí") else "0"
+        elif k == "contingencia_motivo":
+            nuevos[k] = texto(v, "El motivo de la contingencia", False, 200)
+        elif k == "respaldo_externo_ruta":
+            nuevos[k] = respaldo.validar_carpeta_externa(v)
+        elif k in ("alerta_respaldo_dias", "alerta_rango_restante"):
+            n = int(num(v, "El umbral de la alerta", 1, default=3.0))
+            if n > (365 if k == "alerta_respaldo_dias" else 1000000):
+                raise ApiError("El umbral de la alerta es demasiado grande")
+            nuevos[k] = str(n)
         elif k == "ganancia_default":
             nuevos[k] = fmt_num(round(num(v, "El % de ganancia por defecto", 0, default=0.0), 2))
         elif k == "logo":
@@ -657,6 +670,10 @@ def config_put():
             faltan = "; ".join(f"{p['titulo']}" + (f" ({p['detalle']})" if p["detalle"] else "")
                                for p in est["pasos"] if p["obligatorio"] and not p["ok"])
             raise ApiError("No se puede activar el modo fiscal todavía. Falta: " + faltan)
+    if resultante.get("respaldo_externo_activo") == "1" and not resultante.get("respaldo_externo_ruta"):
+        raise ApiError("Elija la carpeta del respaldo externo antes de activarlo")
+    if "contingencia_activa" in nuevos and nuevos["contingencia_activa"] != resultante_antes.get("contingencia_activa"):
+        nuevos["contingencia_desde"] = db.now_str() if nuevos["contingencia_activa"] == "1" else ""
     cambios = [f"{k}: {resultante_antes.get(k, '')!r} → {v!r}" for k, v in nuevos.items() if resultante_antes.get(k) != v]
     g.audit_detalle = "; ".join(cambios)[:600] if cambios else "sin cambios"
     with conn:
@@ -1811,6 +1828,11 @@ DOC_CON_CONTROL = ("factura", "nota_credito", "nota_debito")
 EMISOR_VACIO = {"nombre": "", "rif": "", "direccion": "", "telefono": ""}
 
 
+def en_contingencia(cfg, fiscal_, control):
+    """True si el documento fiscal se emite sin número de control porque el comercio está en modo contingencia."""
+    return bool(fiscal_ and cfg.get("contingencia_activa") == "1" and cfg.get("control_modo") != "serie" and not control)
+
+
 def preparar_fiscal(conn, cfg, tipo, cli, control_in, exigir_cliente=True):
     """Modo fiscal: valida al cliente, asigna (serie propia) o valida (manual) el número de control y devuelve (control, emisor)."""
     control = texto(control_in, "El número de control", False, 40)
@@ -1827,7 +1849,7 @@ def preparar_fiscal(conn, cfg, tipo, cli, control_in, exigir_cliente=True):
         control = fiscal.formatear_control(cfg, sc)
         conn.execute("INSERT INTO config(clave, valor) VALUES('sig_control',?) "
                      "ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (str(sc + 1),))
-    elif cfg.get("control_obligatorio", "1") == "1" and not control:
+    elif cfg.get("control_obligatorio", "1") == "1" and not control and cfg.get("contingencia_activa") != "1":
         raise ApiError("Escriba el número de control (lo asigna su imprenta digital o máquina fiscal)")
     if control:
         if not fiscal.RE_CONTROL.match(control):
@@ -1909,14 +1931,14 @@ def documentos_post():
             "INSERT INTO documentos(tipo, numero, fecha, venta_id, cliente_id, cli_nombre, cli_rif, cli_direccion, cli_telefono, "
             "tasa, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, total_usd, base_bs, exento_bs, iva_bs, total_bs, control, "
             "notas, validez_dias, mostrar_precios, creado_por, igtf_pct, igtf_base_usd, igtf_usd, igtf_bs, fiscal, "
-            "emisor_nombre, emisor_rif, emisor_direccion, emisor_telefono) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "emisor_nombre, emisor_rif, emisor_direccion, emisor_telefono, contingencia) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (tipo, numero, db.now_str(), venta_id, cliente_id, cli["nombre"], cli["rif"], cli["direccion"], cli["telefono"],
              tasa, tot["iva_pct"], tot["iva_modo"], tot["base_usd"], tot["exento_usd"], tot["iva_usd"], tot["total_usd"],
              tot["base_bs"], tot["exento_bs"], tot["iva_bs"], tot["total_bs"],
              control,
              texto(data.get("notas"), "Las observaciones", False, 400), validez, mostrar, g.user["usuario"],
              igtf["pct"], igtf["base"], igtf["usd"], igtf["bs"], 1 if es_fiscal else 0,
-             emisor["nombre"], emisor["rif"], emisor["direccion"], emisor["telefono"]))
+             emisor["nombre"], emisor["rif"], emisor["direccion"], emisor["telefono"], 1 if en_contingencia(cfg, es_fiscal, control) else 0))
         did = cur.lastrowid
         for it in items:
             conn.execute(
@@ -2124,13 +2146,14 @@ def nota_post(conn, cfg, data, tipo):
             "INSERT INTO documentos(tipo, numero, fecha, venta_id, cliente_id, cli_nombre, cli_rif, cli_direccion, cli_telefono, "
             "tasa, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, total_usd, base_bs, exento_bs, iva_bs, total_bs, control, "
             "notas, validez_dias, mostrar_precios, creado_por, igtf_pct, igtf_base_usd, igtf_usd, igtf_bs, fiscal, "
-            "emisor_nombre, emisor_rif, emisor_direccion, emisor_telefono, doc_ref_id, motivo) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "emisor_nombre, emisor_rif, emisor_direccion, emisor_telefono, doc_ref_id, motivo, contingencia) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (tipo, numero, db.now_str(), f["venta_id"], f["cliente_id"], cli["nombre"], cli["rif"], cli["direccion"], cli["telefono"],
              tasa, f["iva_pct"], f["iva_modo"], base_usd, ex_usd, iva_usd, tot_usd, base_bs, ex_bs, iva_bs, tot_bs, control,
              (notas + (" · " if notas else "") + f"Reembolso: {reembolso.replace('_', ' ')}") if tipo == "nota_credito" else notas,
              quien, ig["pct"], ig["base"], ig["usd"], ig["bs"], 1 if es_fiscal else 0,
-             emisor["nombre"], emisor["rif"], emisor["direccion"], emisor["telefono"], f["id"], motivo))
+             emisor["nombre"], emisor["rif"], emisor["direccion"], emisor["telefono"], f["id"], motivo,
+             1 if en_contingencia(cfg, es_fiscal, control) else 0))
         did = cur.lastrowid
         for l in lineas:
             conn.execute(
@@ -2540,6 +2563,9 @@ respaldo.register(app, _sys.modules[__name__])
 import actualizador  # noqa: E402
 
 actualizador.register(app, _sys.modules[__name__])
+import libros  # noqa: E402
+
+libros.register(app, _sys.modules[__name__])
 
 
 # --------------------------------------------------------------------------- arranque

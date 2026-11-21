@@ -546,6 +546,15 @@ DEFAULT_CONFIG = {
     # v0.12: notas de crédito/débito e inmutabilidad
     "sig_nota_credito": "1",
     "sig_nota_debito": "1",
+    # v0.13: contingencia, respaldo externo y alertas
+    "contingencia_activa": "0",     # 1 = se factura sin número de control (imprenta/máquina no disponible); se completa después
+    "contingencia_motivo": "",
+    "contingencia_desde": "",
+    "respaldo_externo_ruta": "",    # carpeta fuera de los datos de la app (otro disco, USB, carpeta sincronizada)
+    "respaldo_externo_activo": "0",
+    "respaldo_externo_ultimo": "",  # «fecha|ok» o «fecha|error: ...»
+    "alerta_respaldo_dias": "3",    # avisar si no hay respaldo (local o externo) de hace más de N días
+    "alerta_rango_restante": "20",  # avisar cuando queden N números de control o menos
     "fiscal_permite_anular": "0",   # 1 = una factura fiscal emitida se puede anular (con motivo) en lugar de exigir nota de crédito
 }
 
@@ -615,6 +624,13 @@ MIGRACIONES = [
     ("documentos", "anulado_motivo", "TEXT NOT NULL DEFAULT ''"),
     ("documento_items", "item_ref_id", "INTEGER"),
     ("ventas", "anulada_motivo", "TEXT NOT NULL DEFAULT ''"),
+    # v0.13: contingencia (documento emitido sin número de control) y datos de la factura del proveedor (libro de compras)
+    ("documentos", "contingencia", "INTEGER NOT NULL DEFAULT 0"),
+    ("compras", "fact_numero", "TEXT NOT NULL DEFAULT ''"),
+    ("compras", "fact_control", "TEXT NOT NULL DEFAULT ''"),
+    ("compras", "fact_fecha", "TEXT NOT NULL DEFAULT ''"),
+    ("compras", "iva_usd", "REAL NOT NULL DEFAULT 0"),
+    ("compras", "exento_usd", "REAL NOT NULL DEFAULT 0"),
 ]
 
 
@@ -660,15 +676,20 @@ TRIGGERS = [
        BEGIN SELECT RAISE(ABORT, 'Las líneas de un documento emitido no se pueden modificar'); END""",
     """CREATE TRIGGER IF NOT EXISTS trg_documentos_fiscal_no_upd
        BEFORE UPDATE OF tipo, numero, fecha, tasa, iva_pct, iva_modo, base_usd, exento_usd, iva_usd, total_usd,
-                        base_bs, exento_bs, iva_bs, total_bs, control, cli_nombre, cli_rif, cli_direccion,
+                        base_bs, exento_bs, iva_bs, total_bs, cli_nombre, cli_rif, cli_direccion,
                         igtf_pct, igtf_base_usd, igtf_usd, igtf_bs, emisor_nombre, emisor_rif, emisor_direccion,
                         doc_ref_id, motivo ON documentos
        WHEN OLD.fiscal = 1
        BEGIN SELECT RAISE(ABORT, 'Un documento fiscal emitido no se puede modificar'); END""",
+    # v0.13: el número de control solo se puede completar si el documento se emitió en contingencia sin él
+    """CREATE TRIGGER IF NOT EXISTS trg_documentos_control_no_upd BEFORE UPDATE OF control ON documentos
+       WHEN OLD.fiscal = 1 AND (OLD.control <> '' OR OLD.contingencia = 0)
+       BEGIN SELECT RAISE(ABORT, 'El número de control de un documento fiscal emitido no se puede modificar'); END""",
 ]
 
 
 def crear_triggers(conn):
+    conn.execute("DROP TRIGGER IF EXISTS trg_documentos_fiscal_no_upd")   # v0.13 cambia su lista de columnas
     for t in TRIGGERS:
         conn.execute(t)
 

@@ -196,17 +196,26 @@ def compras_post():
     total = r2(sum(l[5] for l in lineas))
     if condicion == "contado" and total <= 0:
         raise ApiError("El total de la compra es cero")
+    # v0.13: datos de la factura del proveedor (opcionales; alimentan el libro de compras)
+    fact_numero = texto(data.get("fact_numero"), "El número de factura del proveedor", False, 40)
+    fact_control = texto(data.get("fact_control"), "El número de control de la factura", False, 40)
+    fact_fecha = validar_fecha(data.get("fact_fecha"), "La fecha de la factura") if tiene_valor(data, "fact_fecha") else ""
+    iva_fact = round(num(data.get("iva_usd"), "El IVA de la factura", 0, default=0.0), 2)
+    exento_fact = round(num(data.get("exento_usd"), "El monto exento de la factura", 0, default=0.0), 2)
+    if iva_fact + exento_fact > total + 0.005:
+        raise ApiError("El IVA y el monto exento no pueden superar el total de la compra")
 
     try:
         conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute(
             "INSERT INTO compras(fecha, proveedor_id, proveedor_nombre, almacen_id, referencia, tasa, total_usd, pagado_usd, estado, "
-            "notas, usuario) VALUES(?,?,?,?,?,?,?,0,'registrada',?,?)",
+            "notas, usuario, fact_numero, fact_control, fact_fecha, iva_usd, exento_usd) VALUES(?,?,?,?,?,?,?,0,'registrada',?,?,?,?,?,?,?)",
             (fecha, prov["id"] if prov else None,
              prov["nombre"] if prov else texto(data.get("proveedor_nombre"), "El proveedor", False, 120), aid,
              texto(data.get("referencia"), "La referencia", False, 60),
              tasa_compra, total,
-             texto(data.get("notas"), "Las notas", False, 200), g.user["usuario"]))
+             texto(data.get("notas"), "Las notas", False, 200), g.user["usuario"],
+             fact_numero, fact_control, fact_fecha or "", iva_fact, exento_fact))
         cid = cur.lastrowid
         for p, cant, costo, vence, lote, sub in lineas:
             lote_id = stk.ingresar(conn, p["id"], aid, cant, "compra", f"Compra #{cid}", g.user["usuario"], lote, vence,

@@ -92,7 +92,7 @@ jobs:
             --add-data "frontend;frontend" \
             --add-data "assets;assets" \
             --hidden-import stock --hidden-import errors --hidden-import inventario \
-            --hidden-import caja --hidden-import compras --hidden-import respaldo --hidden-import actualizador --hidden-import fiscal \
+            --hidden-import caja --hidden-import compras --hidden-import respaldo --hidden-import actualizador --hidden-import fiscal --hidden-import libros \
             --collect-all webview \
             main.py
 

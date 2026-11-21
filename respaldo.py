@@ -5,12 +5,13 @@ base de datos (%APPDATA%\\AntareXalesPOS\\respaldos). Los respaldos manuales («
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
 from datetime import datetime
 
-from flask import Blueprint, Response
+from flask import Blueprint, Response, g, request
 
 import database as db
 from errors import ApiError
@@ -21,6 +22,7 @@ log = logging.getLogger("antarexales")
 get_db = ok = get_config = None
 _ENLACES = ("get_db", "ok", "get_config")
 RE_NOMBRE = re.compile(r"^antarexales_(auto|manual)_\d{8}_\d{6}\.db$")
+RE_EXTERNO = re.compile(r"^antarexales_ext_\d{8}_\d{6}\.db$")
 _lock = threading.Lock()
 _hilo = None
 
@@ -60,7 +62,128 @@ def hacer_respaldo(tipo="auto"):
                 except OSError:
                     log.warning("No se pudo borrar el respaldo antiguo %s", viejo)
         log.info("Respaldo %s creado: %s", tipo, nombre)
+        _externo_si_activo(destino)
         return nombre
+
+
+# ---------------------------------------------------------------- respaldo externo (v0.13)
+def _cfg(conn, clave, defecto=""):
+    r = conn.execute("SELECT valor FROM config WHERE clave=?", (clave,)).fetchone()
+    return r[0] if r and r[0] is not None else defecto
+
+
+def _guardar_cfg(conn, clave, valor):
+    conn.execute("INSERT INTO config(clave, valor) VALUES(?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor", (clave, valor))
+    conn.commit()
+
+
+def validar_carpeta_externa(valor):
+    """Normaliza y comprueba la carpeta del respaldo externo: absoluta, existente, escribible y FUERA de los datos de la app."""
+    v = str(valor or "").strip()
+    if not v:
+        return ""
+    if len(v) > 300:
+        raise ApiError("La ruta es demasiado larga")
+    if not os.path.isabs(v):
+        raise ApiError("Escriba la ruta completa de la carpeta (por ejemplo D:\\Respaldos o E:\\USB\\Copias)")
+    v = os.path.normpath(v)
+    datos = os.path.realpath(os.path.dirname(db.get_db_path()))
+    real = os.path.realpath(v)
+    if real == datos or real.startswith(datos + os.sep):
+        raise ApiError("La carpeta externa debe estar fuera de la carpeta de datos de la aplicación (otro disco, USB o carpeta sincronizada)")
+    if not os.path.isdir(v):
+        raise ApiError("La carpeta no existe o no está disponible: " + v)
+    prueba = os.path.join(v, f".antarexales_prueba_{os.getpid()}.tmp")
+    try:
+        with open(prueba, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(prueba)
+    except OSError as e:
+        raise ApiError("No se puede escribir en esa carpeta: " + str(e.strerror or e))
+    return v
+
+
+def _integridad_ok(ruta):
+    c = sqlite3.connect(ruta)
+    try:
+        return c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    finally:
+        c.close()
+
+
+def _copiar_externo(origen=None):
+    """Copia (y verifica) un respaldo en la carpeta externa. Si no hay `origen`, hace una copia consistente de la base.
+    Registra el resultado en «respaldo_externo_ultimo». Devuelve el nombre; lanza ApiError si falla. Llamar con _lock tomado."""
+    conn = db.get_conn()
+    try:
+        ruta = _cfg(conn, "respaldo_externo_ruta")
+        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if not ruta:
+            raise ApiError("No hay carpeta de respaldo externo configurada")
+        try:
+            ruta = validar_carpeta_externa(ruta)
+            nombre = f"antarexales_ext_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            final, parcial = os.path.join(ruta, nombre), os.path.join(ruta, nombre + ".part")
+            try:
+                if origen:
+                    shutil.copyfile(origen, parcial)
+                else:
+                    dst = sqlite3.connect(parcial)
+                    try:
+                        conn.backup(dst)
+                    finally:
+                        dst.close()
+                if not _integridad_ok(parcial):
+                    raise ApiError("La copia externa no pasó la verificación de integridad")
+                os.replace(parcial, final)
+            finally:
+                if os.path.exists(parcial):
+                    try:
+                        os.remove(parcial)
+                    except OSError:
+                        pass
+            conservar = get_conservar(conn)
+            if conservar > 0:
+                viejos = sorted(f for f in os.listdir(ruta) if RE_EXTERNO.match(f))[:-conservar]
+                for f in viejos:
+                    try:
+                        os.remove(os.path.join(ruta, f))
+                    except OSError:
+                        log.warning("No se pudo borrar el respaldo externo antiguo %s", f)
+            _guardar_cfg(conn, "respaldo_externo_ultimo", f"{ahora}|ok|{nombre}")
+            log.info("Respaldo externo creado: %s", final)
+            return nombre
+        except (ApiError, OSError, sqlite3.Error) as e:
+            msg = e.message if isinstance(e, ApiError) and hasattr(e, "message") else str(e)
+            _guardar_cfg(conn, "respaldo_externo_ultimo", f"{ahora}|error|{msg}"[:300])
+            log.warning("Falló el respaldo externo: %s", msg)
+            raise ApiError("Falló el respaldo externo: " + msg, 500) if not isinstance(e, ApiError) else e
+    finally:
+        conn.close()
+
+
+def _externo_si_activo(origen=None):
+    conn = db.get_conn()
+    try:
+        activo = _cfg(conn, "respaldo_externo_activo", "0") == "1"
+    finally:
+        conn.close()
+    if activo:
+        try:
+            _copiar_externo(origen)
+        except Exception:
+            pass   # ya quedó registrado en «respaldo_externo_ultimo»; el respaldo local sigue siendo válido
+
+
+def externo_ultimo(conn):
+    """{'fecha','ok','detalle'} del último intento de respaldo externo, o None."""
+    v = _cfg(conn, "respaldo_externo_ultimo")
+    if not v:
+        return None
+    partes = v.split("|", 2)
+    if len(partes) < 3:
+        return None
+    return {"fecha": partes[0], "ok": partes[1] == "ok", "detalle": partes[2]}
 
 
 def get_conservar(conn):
@@ -97,6 +220,18 @@ def ciclo(intervalo=1800):
                 conn.close()
             if activo and not hay_respaldo_de_hoy():
                 hacer_respaldo("auto")
+            conn = db.get_conn()
+            try:
+                ext = _cfg(conn, "respaldo_externo_activo") == "1"
+                ult = externo_ultimo(conn)
+            finally:
+                conn.close()
+            if ext and not (ult and ult["ok"] and ult["fecha"][:10] == datetime.now().strftime("%Y-%m-%d")):
+                with _lock:
+                    try:
+                        _copiar_externo()
+                    except Exception:
+                        pass
         except Exception:
             log.exception("Falló el respaldo automático")
         time.sleep(intervalo)
@@ -139,3 +274,36 @@ def auto_descargar(nombre):
     resp.headers["Content-Length"] = str(len(contenido))
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@bp.get("/api/backup/externo")
+def externo_estado():
+    conn = get_db()
+    ruta = _cfg(conn, "respaldo_externo_ruta")
+    archivos, error = [], ""
+    if ruta:
+        try:
+            for f in sorted((f for f in os.listdir(ruta) if RE_EXTERNO.match(f)), reverse=True)[:30]:
+                st = os.stat(os.path.join(ruta, f))
+                archivos.append({"nombre": f, "bytes": st.st_size, "fecha": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")})
+        except OSError:
+            error = "La carpeta no está disponible (¿disco o USB desconectado?)"
+    return ok({"activo": _cfg(conn, "respaldo_externo_activo") == "1", "ruta": ruta, "ultimo": externo_ultimo(conn),
+               "archivos": archivos, "error": error})
+
+
+@bp.post("/api/backup/externo/probar")
+def externo_probar():
+    d = request.get_json(silent=True) or {}
+    ruta = validar_carpeta_externa(d.get("ruta"))
+    if not ruta:
+        raise ApiError("Escriba la ruta de la carpeta")
+    return ok({"ruta": ruta})
+
+
+@bp.post("/api/backup/externo")
+def externo_ahora():
+    with _lock:
+        nombre = _copiar_externo()
+    g.audit_detalle = "respaldo externo " + nombre
+    return ok({"nombre": nombre}, 201)
