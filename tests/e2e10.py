@@ -40,7 +40,7 @@ with sync_playwright() as p:
     ok(vistas_on() == ["v-cfg-general"] and pg.is_visible("[name=negocio_nombre]") and not pg.is_visible("[name=iva_pct]"), "abre en «General»; lo demás está oculto")
     pg.screenshot(path=OUT + "/v10_cfg_general.png")
     for v, campo in [("cfg-ventas", "[name=caja_obligatoria]"), ("cfg-impuestos", "[name=iva_activo]"), ("actualizaciones", "[name=actualizar_al_abrir]"), ("acerca", "#v-acerca .about"),
-                     ("bitacora", "#bitBody"), ("usuarios", "#uBody"), ("respaldo", "#bRuta"), ("cfg-fiscal", "[name=fiscal_activo]")]:
+                     ("bitacora", "#bDesde"), ("usuarios", "#v-usuarios table"), ("respaldo", "#bRuta"), ("cfg-fiscal", "[name=fiscal_activo]")]:
         pg.click(f"#nav [data-v={v}]")
         ok(vistas_on() == ["v-" + v] and pg.is_visible(campo) and pg.eval_on_selector(f"#nav [data-v={v}]", "e=>e.classList.contains('on')"), f"submenú «{v}»: vista completa propia")
         ok("Configuración ›" in pg.inner_text("#titulo"), f"título de «{v}»: {pg.inner_text('#titulo')}")

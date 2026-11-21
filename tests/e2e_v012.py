@@ -52,7 +52,7 @@ try:
         pg.click(f'#hBody [data-act=anular][data-id="{v2["id"]}"]'); pg.wait_for_selector("#modalAuth.open")
         pg.fill('#authExtra [data-x=motivo]', "Prueba de anulación"); pg.click("#authSi"); pg.wait_for_timeout(1000)
         # ---- bitácora
-        pg.click('[data-act=ir][data-v=config]'); pg.click('#cfgTabs [data-t=bitacora]'); pg.wait_for_selector("#bitBody tr")
+        pg.click('[data-act=ir][data-v=config]'); pg.click('#nav [data-v=bitacora]'); pg.wait_for_selector("#bitBody tr")
         t = pg.inner_text("#bitBody")
         assert "anulación de venta" in t and "Prueba de anulación" in t and "emisión de documento" in t, t
         assert pg.locator("#cfgPie").is_hidden()

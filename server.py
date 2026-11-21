@@ -2180,7 +2180,7 @@ def nota_post(conn, cfg, data, tipo):
 def documentos_get():
     conn = get_db()
     sql = ("SELECT id, tipo, numero, fecha, venta_id, cliente_id, cli_nombre, cli_rif, total_usd, total_bs, iva_usd, estado, "
-           "control, creado_por, validez_dias, fiscal, doc_ref_id, motivo FROM documentos WHERE 1=1")
+           "control, creado_por, validez_dias, fiscal, doc_ref_id, motivo, contingencia FROM documentos WHERE 1=1")
     params = []
     tipo = (request.args.get("tipo") or "").strip()
     if tipo:

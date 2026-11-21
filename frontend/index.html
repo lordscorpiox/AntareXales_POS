@@ -406,6 +406,8 @@ table.tbl{width:100%;border-collapse:collapse}
   <div class="main">
     <header class="top">
       <h1 id="titulo"></h1><span class="sp"></span>
+      <span id="chipCont" class="badge bad" hidden title="Se factura sin número de control; complételo después">CONTINGENCIA</span>
+      <button class="btn sm" id="btnAlertas" data-act="alertas" title="Avisos del sistema" hidden>🔔 <span id="alN"></span></button>
       <span id="userBadge" class="muted"></span>
       <button class="btn sm" data-act="tema" title="Cambiar tema (solo esta sesión)">🌓 Tema</button>
       <button class="btn sm" data-act="miClave" title="Cambiar mi contraseña">🔑 Mi clave</button>
@@ -554,6 +556,16 @@ table.tbl{width:100%;border-collapse:collapse}
           </div>
           <div class="tbl-wrap" style="max-height:260px"><table class="tbl"><thead><tr><th>Archivo</th><th>Tipo</th><th>Fecha</th><th class="right">Tamaño</th><th></th></tr></thead><tbody id="raBody"></tbody></table></div>
         </div>
+        <div class="sec card"><h3>Respaldo externo</h3>
+          <div class="muted small">Copia verificada de la base de datos en una carpeta <b>fuera</b> de los datos de la aplicación: otro disco, un USB o una carpeta sincronizada (OneDrive, Google Drive...). Se hace una vez al día y con cada respaldo; se conservan los últimos indicados arriba.</div>
+          <div class="field" style="margin-top:8px"><label>Carpeta de destino</label><input id="reRuta" placeholder="D:\Respaldos\AntareXales" maxlength="300"></div>
+          <label class="chk" style="margin-top:6px"><input type="checkbox" id="reActivo"> Copiar automáticamente a esta carpeta</label>
+          <div class="toolbar" style="margin:10px 0 0">
+            <button class="btn" data-act="reProbar">Probar carpeta</button><button class="btn pri" data-act="reGuardar">Guardar</button>
+            <button class="btn" data-act="reAhora">☁ Respaldar ahora en la carpeta externa</button></div>
+          <div id="reInfo" class="small" style="margin:8px 0"></div>
+          <div class="tbl-wrap" style="max-height:200px"><table class="tbl"><thead><tr><th>Archivo</th><th>Fecha</th><th class="right">Tamaño</th></tr></thead><tbody id="reBody"></tbody></table></div>
+        </div>
         <div class="sec card"><h3>Exportar a CSV</h3>
           <div class="toolbar" style="margin:0">
             <button class="btn" data-act="expCsv" data-t="productos">Productos</button>
@@ -596,6 +608,22 @@ table.tbl{width:100%;border-collapse:collapse}
         </div>
       </section>
 
+      <!-- LIBROS FISCALES -->
+      <section id="v-libros" class="view">
+        <div class="toolbar">
+          <div class="tabs" id="libTabs" role="tablist"><button type="button" class="on" data-act="libroTipo" data-t="ventas">Libro de ventas</button><button type="button" data-act="libroTipo" data-t="compras">Libro de compras</button></div>
+          <span class="sp"></span>
+          <label class="small muted">Desde <input id="lDesde" type="date"></label><label class="small muted">Hasta <input id="lHasta" type="date"></label>
+          <button class="btn" data-act="libroVer">Consultar</button>
+          <button class="btn" data-act="libroImprimir">🖨 Imprimir</button>
+          <button class="btn" data-act="libroCsv">⬇ CSV</button>
+        </div>
+        <div id="libAviso"></div>
+        <div class="tbl-wrap"><table class="tbl"><thead id="libHead"></thead><tbody id="libBody"></tbody><tfoot id="libFoot"></tfoot></table></div>
+        <div id="libResumen" class="sec card" style="margin-top:14px" hidden></div>
+        <div class="hint" style="margin-top:8px">Los libros se arman con los documentos y compras registrados. Las notas de crédito restan; los documentos anulados aparecen con valor cero. Es una ayuda: confirme el formato que exige su contador o el SENIAT.</div>
+      </section>
+
       <!-- 8. CONFIGURACIÓN: cada sección es una vista completa (submenú) -->
       <form data-form="config" id="cfgForm">
       <section id="v-cfg-general" class="view cfgv">
@@ -618,6 +646,10 @@ table.tbl{width:100%;border-collapse:collapse}
               <button class="btn sm" type="button" data-act="quitarLogo">Quitar</button>
             </div></div>
           <div class="field" style="max-width:340px"><label>Tema de la aplicación</label><select name="tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option></select></div>
+        </div>
+        <div class="card sec cfgcard"><h3>Alertas</h3>
+          <div class="field" style="max-width:340px"><label>Avisar si el último respaldo supera (días)</label><input name="alerta_respaldo_dias" type="number" min="1" max="365" step="1">
+            <div class="hint">Los avisos se ven en la campana 🔔 de la barra superior.</div></div>
         </div>
       </section>
       <section id="v-cfg-ventas" class="view cfgv">
@@ -682,6 +714,13 @@ table.tbl{width:100%;border-collapse:collapse}
           <label class="chk"><input type="checkbox" name="igtf_activo"> Cobrar IGTF sobre lo pagado en divisas</label>
           <div class="grid2"><div class="field"><label>Alícuota IGTF (%)</label><input name="igtf_pct" type="number" step="any" min="0" max="100"><div class="hint">Confirme el porcentaje vigente con su contador.</div></div>
             <div class="field"><label>Métodos de pago sujetos a IGTF</label><div id="igtfMetodos" style="display:grid;gap:4px"></div></div></div>
+        </div>
+        <div class="card sec cfgcard"><h3>Contingencia</h3>
+          <div class="hint">Úsela cuando su imprenta digital o máquina fiscal no esté disponible (sin internet, falla del proveedor). Mientras esté activa se puede facturar sin número de control; esas facturas quedan marcadas «Contingencia» y deben completarse después (Documentos o Libros fiscales). Desactívela al normalizarse el servicio.</div>
+          <label class="chk"><input type="checkbox" name="contingencia_activa"> Modo contingencia activo</label>
+          <div class="field"><label>Motivo (opcional)</label><input name="contingencia_motivo" maxlength="200" placeholder="Ej.: sin internet, falla de la imprenta digital"></div>
+          <div class="field" style="max-width:340px"><label>Avisar cuando queden (números de control)</label><input name="alerta_rango_restante" type="number" min="1" step="1">
+            <div class="hint">Solo con serie propia y un tope de rango autorizado.</div></div>
         </div>
       </section>
       <section id="v-actualizaciones" class="view cfgv">
@@ -1030,7 +1069,7 @@ const esAdmin = () => S.user && S.user.rol === "admin";
 const VISTAS = [
   ["ventas", "🛒", "Ventas", false], ["caja", "💵", "Caja", false], ["inventario", "📦", "Inventario", false],
   ["compras", "🚚", "Compras", true], ["clientes", "👥", "Clientes", false],
-  ["documentos", "📄", "Documentos", false], ["historial", "🧾", "Historial", false], ["reportes", "📊", "Reportes", true],
+  ["documentos", "📄", "Documentos", false], ["historial", "🧾", "Historial", false], ["reportes", "📊", "Reportes", true], ["libros", "📚", "Libros fiscales", true],
   ["config", "⚙️", "Configuración", true],
   ["cfg-general", "🏢", "General", true, "config"], ["cfg-ventas", "🛍️", "Ventas e inventario", true, "config"],
   ["cfg-impuestos", "🧮", "Impuestos y documentos", true, "config"], ["cfg-fiscal", "🧾", "Fiscal", true, "config"],
@@ -1060,7 +1099,8 @@ async function entrar() {
   await cargarTurno();
   if (esAdmin()) cargarAlertaVenc();
   if (esAdmin() && S.config.actualizar_al_abrir !== "0" && !S.updRevisado) { S.updRevisado = true; setTimeout(() => buscarActualizacion(false), 1500); }
-  aplicarTema();
+  aplicarTema(); aplicarContingencia(); cargarAlertas();
+  if (!S.alTimer) S.alTimer = setInterval(() => { if (S.token) cargarAlertas(); }, 300000);
   $("#login").hidden = true; $("#app").hidden = false;  // se muestra recién con los datos cargados
   ir("ventas");
 }
@@ -1133,7 +1173,7 @@ function ir(v) {
   $("#titulo").textContent = tituloDe(v);
   actualizarTasaUI();
   const f = ({ventas: renderVentas, caja: renderCaja, compras: renderCompras, inventario: renderInventario, clientes: renderClientes, documentos: initDocumentos, historial: initHistorial,
-    reportes: initReportes, respaldo: initRespaldo, usuarios: renderUsuarios, bitacora: () => cargarBitacora(false), acerca: () => {}})[v] || (esVistaCfg(v) ? (() => { if (!esVistaCfg(venia)) initConfig(); }) : null);   // entre secciones del mismo formulario no se pierde lo editado
+    reportes: initReportes, respaldo: initRespaldo, usuarios: renderUsuarios, libros: initLibros, bitacora: () => cargarBitacora(false), acerca: () => {}})[v] || (esVistaCfg(v) ? (() => { if (!esVistaCfg(venia)) initConfig(); }) : null);   // entre secciones del mismo formulario no se pierde lo editado
   if (f) f();
 }
 function actualizarTasaUI() {
@@ -1698,11 +1738,12 @@ const cargarDocumentos = safe(async () => {
   const lista = await api("GET", "/api/documentos?" + q);
   $("#dBody").innerHTML = lista.length ? lista.map(d => `<tr class="${d.estado === "anulado" ? "void" : ""}">
     <td><span class="badge ${d.tipo === "factura" ? "ok" : d.tipo === "proforma" ? "warn" : d.tipo === "nota_credito" ? "bad" : d.tipo === "nota_debito" ? "warn" : "gray"}">${DOC_TIPOS[d.tipo][0]}</span>${d.fiscal ? ' <span class="small muted" title="Documento fiscal">●</span>' : ""}</td>
-    <td class="nowrap"><b>${docNum(d)}</b>${d.control ? `<div class="small muted">Control ${esc(d.control)}</div>` : ""}</td><td class="nowrap">${fmtFecha(d.fecha)}</td>
+    <td class="nowrap"><b>${docNum(d)}</b>${d.control ? `<div class="small muted">Control ${esc(d.control)}</div>` : (d.contingencia && d.estado === "emitido" ? `<div><span class="badge warn" title="Emitida en contingencia, sin número de control">Control pendiente</span></div>` : "")}</td><td class="nowrap">${fmtFecha(d.fecha)}</td>
     <td>${esc(d.cli_nombre)}${d.cli_rif ? `<div class="small muted">${esc(d.cli_rif)}</div>` : ""}</td>
     <td class="right">${bsf(d.total_bs)}</td><td class="right">${usd(d.total_usd)}</td>
     <td>${d.estado === "anulado" ? '<span class="badge bad">Anulado</span>' : '<span class="badge ok">Emitido</span>'}</td>
     <td class="act"><button class="btn sm" data-act="verDoc" data-id="${d.id}">🖨 Ver / Imprimir</button>
+      ${esAdmin() && d.contingencia && !d.control && d.estado === "emitido" ? `<button class="btn sm" data-act="completarControl" data-id="${d.id}">Completar control</button>` : ""}
       ${d.tipo === "proforma" && d.estado === "emitido" ? `<button class="btn sm" data-act="proformaAlCarrito" data-id="${d.id}">Al carrito</button>` : ""}
       ${d.tipo === "factura" && d.estado === "emitido" ? `<button class="btn sm" data-act="notaCredito" data-id="${d.id}">Nota de crédito</button><button class="btn sm" data-act="notaDebito" data-id="${d.id}">Nota de débito</button>` : ""}
       ${esAdmin() && d.estado === "emitido" && !d.tipo.startsWith("nota_c") && d.tipo !== "nota_debito" && !(d.fiscal && S.config.fiscal_permite_anular !== "1") ? `<button class="btn sm danger" data-act="anularDoc" data-id="${d.id}">Anular</button>` : ""}</td></tr>`).join("")
@@ -1731,6 +1772,7 @@ function docHtml(d) {
   }
   const meta = [`<div class="nro">Nº ${docNum(d)}</div>`];
   if (["factura", "nota_credito", "nota_debito"].includes(d.tipo) && d.control) meta.push(`<div>Nº de control: <b>${esc(d.control)}</b></div>`);
+  else if (d.contingencia && d.estado !== "anulado") meta.push(`<div>Nº de control: <b>PENDIENTE</b> <span class="small">(emitida en contingencia)</span></div>`);
   meta.push(`<div>Fecha: ${fmtFecha(d.fecha).slice(0, 10)}</div>`);
   if (d.tipo === "proforma" && d.vence) meta.push(`<div>Válida hasta: <b>${fmtFecha(d.vence).slice(0, 10)}</b></div>`);
   if (d.venta_id) meta.push(`<div class="small">Venta #${d.venta_id}</div>`);
@@ -1756,7 +1798,8 @@ function docHtml(d) {
 const campoControl = () => {
   if (!fiscalOn()) return `<div class="field"><label>Nº de control (opcional)</label><input data-x="control"></div>`;
   if (S.config.control_modo === "serie") return `<div class="small muted">El número de control se asigna solo (serie propia).</div>`;
-  return `<div class="field"><label>Nº de control${S.config.control_obligatorio !== "0" ? " *" : " (opcional)"}</label><input data-x="control" placeholder="Lo asigna su imprenta digital o máquina fiscal"></div>`;
+  const cont = S.config.contingencia_activa === "1";
+  return `<div class="field"><label>Nº de control${S.config.control_obligatorio !== "0" && !cont ? " *" : " (opcional)"}</label><input data-x="control" placeholder="${cont ? "Contingencia: puede dejarlo vacío y completarlo después" : "Lo asigna su imprenta digital o máquina fiscal"}"></div>`;
 };
 function notaCredito(f) {
   if (f.estado !== "emitido") return toast("La factura está anulada", "warn");
@@ -1815,9 +1858,9 @@ const docDeVenta = safe(async (tipo, id) => {
 function formDocumento(tipo, ctx) {
   const venta = ctx.venta || null;
   const c = venta ? (venta.cliente_id ? S.cliMap.get(venta.cliente_id) : null) : (S.clienteSel ? S.cliMap.get(S.clienteSel) : null);
-  const serie = fiscalOn() && S.config.control_modo === "serie", obl = fiscalOn() && S.config.control_modo !== "serie" && S.config.control_obligatorio !== "0";
+  const serie = fiscalOn() && S.config.control_modo === "serie", cont = fiscalOn() && S.config.contingencia_activa === "1", obl = fiscalOn() && S.config.control_modo !== "serie" && S.config.control_obligatorio !== "0" && !cont;
   const extra = tipo === "factura" ? (serie ? `<div class="field"><label>Nº de control</label><input disabled value="Se asigna solo al generar (serie propia)"></div>`
-      : `<div class="field"><label>Nº de control${obl ? " *" : " (opcional)"}</label><input name="control" ${obl ? "required" : ""} placeholder="Lo asigna su imprenta digital o máquina fiscal"></div>`)
+      : `<div class="field"><label>Nº de control${obl ? " *" : " (opcional)"}</label><input name="control" ${obl ? "required" : ""} placeholder="${cont ? "Contingencia: puede dejarlo vacío" : "Lo asigna su imprenta digital o máquina fiscal"}"></div>`)
     : tipo === "proforma" ? `<div class="field"><label>Válida por (días)</label><input name="validez_dias" type="number" min="1" max="365" step="1" value="${esc(S.config.proforma_validez || "7")}"></div>`
     : `<label class="chk"><input type="checkbox" name="mostrar_precios"> Mostrar precios y totales en la nota</label>`;
   abrirModal(`<h3>${tipo === "factura" ? "Generar factura" : tipo === "proforma" ? "Generar proforma" : "Generar nota de entrega"}${venta ? ` · venta #${venta.id}` : ""}</h3>
@@ -1976,7 +2019,7 @@ const initRespaldo = safe(async () => {
   const d = await api("GET", "/api/backup/db-path");
   $("#bRuta").textContent = d.ruta;
   $("#bInfo").textContent = `${(d.tamano_bytes / 1024).toFixed(1)} KB · modo ${d.modo}`;
-  cargarRespaldosAuto();
+  cargarRespaldosAuto(); cargarExterno();
   S.importData = null; $("#btnImportar").disabled = true; $("#fileCsv").value = ""; $("#mResultado").innerHTML = "";
 });
 const cargarRespaldosAuto = safe(async () => {
@@ -2080,9 +2123,9 @@ function initConfig() {
   f.elements.permitir_stock_negativo.checked = c.permitir_stock_negativo === "1";
   f.elements.iva_activo.checked = c.iva_activo === "1";
   for (const k of ["iva_pct", "iva_pct_reducida", "iva_pct_adicional", "sig_factura", "sig_proforma", "sig_nota", "sig_nota_credito", "sig_nota_debito", "proforma_validez", "doc_pie",
-    "fiscal_razon_social", "control_prefijo", "control_digitos", "sig_control", "control_hasta", "igtf_pct"]) f.elements[k].value = c[k] ?? "";
+    "fiscal_razon_social", "control_prefijo", "control_digitos", "sig_control", "control_hasta", "igtf_pct", "contingencia_motivo", "alerta_respaldo_dias", "alerta_rango_restante"]) f.elements[k].value = c[k] ?? "";
   f.elements.control_modo.value = c.control_modo || "manual";
-  for (const k of ["fiscal_activo", "control_obligatorio", "fiscal_exige_cliente", "igtf_activo", "fiscal_permite_anular"]) f.elements[k].checked = c[k] === "1";
+  for (const k of ["fiscal_activo", "control_obligatorio", "fiscal_exige_cliente", "igtf_activo", "fiscal_permite_anular", "contingencia_activa"]) f.elements[k].checked = c[k] === "1";
   const igM = new Set(String(c.igtf_metodos || "").split(",").filter(Boolean));
   $("#igtfMetodos").innerHTML = Object.entries(METODOS).filter(([, m]) => m[1] === "USD").map(([k, m]) =>
     `<label class="chk"><input type="checkbox" data-igtf="${k}" ${igM.has(k) ? "checked" : ""}> ${esc(m[0])}</label>`).join("");
@@ -2118,6 +2161,112 @@ function cargarLogo(file) {
     fr.readAsDataURL(file);
   });
 }
+
+/* ============================== v0.13 · LIBROS, ALERTAS, RESPALDO EXTERNO ============================== */
+const LIB = {tipo: "ventas", data: null};
+function initLibros() {
+  if (!$("#lDesde").value) { const h = new Date(); $("#lDesde").value = ymd(new Date(h.getFullYear(), h.getMonth(), 1)); $("#lHasta").value = ymd(new Date(h.getFullYear(), h.getMonth() + 1, 0)); }
+  cargarLibro();
+}
+const nfLib = n => nf2.format(n || 0);
+const cargarLibro = safe(async () => {
+  const q = new URLSearchParams({desde: $("#lDesde").value, hasta: $("#lHasta").value});
+  const d = LIB.data = await api("GET", `/api/libros/${LIB.tipo}?` + q);
+  $$("#libTabs button").forEach(b => b.classList.toggle("on", b.dataset.t === LIB.tipo));
+  const v = LIB.tipo === "ventas", cab = v
+    ? ["Fecha", "Documento", "Control", "Cliente", "RIF / C.I.", "Exento Bs", "Base Bs", "IVA Bs", "IGTF Bs", "Total Bs", "Total USD"]
+    : ["Fecha", "Fecha factura", "Proveedor", "RIF", "Nº factura", "Nº control", "Exento Bs", "Base Bs", "IVA Bs", "Total Bs", "Total USD"];
+  const nNum = v ? 6 : 5;
+  $("#libHead").innerHTML = "<tr>" + cab.map((c, i) => `<th class="${i >= cab.length - nNum ? "right" : ""}">${c}</th>`).join("") + "</tr>";
+  const nums = f => v ? [f.exento_bs, f.base_bs, f.iva_bs, f.igtf_bs, f.total_bs, f.total_usd] : [f.exento_bs, f.base_bs, f.iva_bs, f.total_bs, f.total_usd];
+  $("#libBody").innerHTML = d.items.length ? d.items.map(f => {
+    const anul = f.estado === "anulado" || f.estado === "anulada";
+    const celdas = v
+      ? [`<td class="nowrap">${fmtFecha(f.fecha).slice(0, 10)}</td>`, `<td class="nowrap">${esc(f.tipo_nombre)} <b>${docNum(f)}</b>${f.ref ? `<div class="small muted">Afecta: ${esc(f.ref)}</div>` : ""}${anul ? ' <span class="badge bad">Anulado</span>' : ""}</td>`,
+         `<td class="nowrap">${f.control ? esc(f.control) : f.pendiente_control ? `<span class="badge warn">Pendiente</span> <button class="btn sm" data-act="completarControl" data-id="${f.id}">Completar</button>` : "—"}</td>`,
+         `<td>${esc(f.cliente)}</td>`, `<td class="nowrap">${esc(f.rif)}</td>`]
+      : [`<td class="nowrap">${fmtFecha(f.fecha).slice(0, 10)}</td>`, `<td class="nowrap">${f.fact_fecha ? fmtFecha(f.fact_fecha) : "—"}</td>`, `<td>${esc(f.proveedor) || "—"}${anul ? ' <span class="badge bad">Anulada</span>' : ""}</td>`,
+         `<td class="nowrap">${esc(f.rif)}</td>`, `<td class="nowrap">${f.fact_numero ? esc(f.fact_numero) : (anul ? "—" : '<span class="badge warn">Sin factura</span>')}</td>`, `<td class="nowrap">${esc(f.fact_control) || "—"}</td>`];
+    return `<tr class="${anul ? "void" : ""}">${celdas.join("")}${nums(f).map(n => `<td class="right nowrap">${nfLib(n)}</td>`).join("")}</tr>`;
+  }).join("") : `<tr><td colspan="${cab.length}" class="empty">Sin movimientos en el período</td></tr>`;
+  const t = d.totales, tn = v ? [t.exento_bs, t.base_bs, t.iva_bs, t.igtf_bs, t.total_bs, t.total_usd] : [t.exento_bs, t.base_bs, t.iva_bs, t.total_bs, t.total_usd];
+  $("#libFoot").innerHTML = `<tr><th colspan="${cab.length - nNum}" class="right">Totales (${d.n} registro${d.n === 1 ? "" : "s"})</th>${tn.map(n => `<th class="right nowrap">${nfLib(n)}</th>`).join("")}</tr>`;
+  const aviso = v ? (d.pendientes_control ? `<span class="badge warn">${d.pendientes_control} documento(s) en contingencia sin número de control</span>` : "")
+    : (d.sin_factura ? `<span class="badge warn">${d.sin_factura} compra(s) sin datos de factura del proveedor</span>` : "");
+  $("#libAviso").innerHTML = aviso ? `<div style="margin-bottom:10px">${aviso}</div>` : "";
+  const rs = $("#libResumen"); rs.hidden = !(v && d.por_alicuota.length);
+  if (v) rs.innerHTML = `<h3>Resumen por alícuota de IVA</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Alícuota</th><th class="right">Base Bs</th><th class="right">IVA Bs</th><th class="right">Base USD</th><th class="right">IVA USD</th></tr></thead><tbody>` +
+    d.por_alicuota.map(a => `<tr><td>${a.alicuota === "exento" ? "Exento / exonerado" : nfLib(+a.alicuota) + " %"}</td><td class="right">${nfLib(a.base_bs)}</td><td class="right">${nfLib(a.iva_bs)}</td><td class="right">${nfLib(a.base_usd)}</td><td class="right">${nfLib(a.iva_usd)}</td></tr>`).join("") + "</tbody></table></div>";
+});
+function libroImprimir() {
+  const d = LIB.data; if (!d) return;
+  const v = LIB.tipo === "ventas", e = d.emisor, t = d.totales;
+  const cab = v ? ["Fecha", "Documento", "Control", "Cliente", "RIF", "Exento", "Base", "IVA", "IGTF", "Total Bs", "Total USD"] : ["Fecha", "Fecha fact.", "Proveedor", "RIF", "Nº factura", "Control", "Exento", "Base", "IVA", "Total Bs", "Total USD"];
+  const nN = v ? 6 : 5, nums = f => v ? [f.exento_bs, f.base_bs, f.iva_bs, f.igtf_bs, f.total_bs, f.total_usd] : [f.exento_bs, f.base_bs, f.iva_bs, f.total_bs, f.total_usd];
+  const filas = d.items.map(f => {
+    const c = v ? [fmtFecha(f.fecha).slice(0, 10), `${f.tipo_nombre} ${docNum(f)}${f.estado === "anulado" ? " (ANULADO)" : ""}`, f.control || (f.pendiente_control ? "PENDIENTE" : ""), f.cliente, f.rif]
+      : [fmtFecha(f.fecha).slice(0, 10), f.fact_fecha ? fmtFecha(f.fact_fecha) : "", f.proveedor + (f.estado !== "registrada" ? " (ANULADA)" : ""), f.rif, f.fact_numero, f.fact_control];
+    return `<tr>${c.map(x => `<td>${esc(x)}</td>`).join("")}${nums(f).map(n => `<td class="r">${nfLib(n)}</td>`).join("")}</tr>`;
+  }).join("");
+  const tn = v ? [t.exento_bs, t.base_bs, t.iva_bs, t.igtf_bs, t.total_bs, t.total_usd] : [t.exento_bs, t.base_bs, t.iva_bs, t.total_bs, t.total_usd];
+  const resumen = v && d.por_alicuota.length ? `<h4>Resumen por alícuota</h4><table style="width:auto"><tr><th>Alícuota</th><th class="r">Base Bs</th><th class="r">IVA Bs</th></tr>${d.por_alicuota.map(a => `<tr><td>${a.alicuota === "exento" ? "Exento" : nfLib(+a.alicuota) + " %"}</td><td class="r">${nfLib(a.base_bs)}</td><td class="r">${nfLib(a.iva_bs)}</td></tr>`).join("")}</table>` : "";
+  abrirImpresion(`<div class="paper" style="width:100%;font-size:10px"><h2>${esc(e.nombre)}</h2><div>${e.rif ? "RIF: " + esc(e.rif) : ""} ${esc(e.direccion)}</div>
+    <h4 style="font-size:14px">${v ? "LIBRO DE VENTAS" : "LIBRO DE COMPRAS"} · del ${fmtFecha(d.desde)} al ${fmtFecha(d.hasta)}</h4>
+    <table><thead><tr>${cab.map((c, i) => `<th class="${i >= cab.length - nN ? "r" : ""}">${c}</th>`).join("")}</tr></thead><tbody>${filas}</tbody>
+    <tfoot><tr><th colspan="${cab.length - nN}" class="r">TOTALES (${d.n})</th>${tn.map(n => `<th class="r">${nfLib(n)}</th>`).join("")}</tr></tfoot></table>${resumen}
+    <div class="small" style="margin-top:8px">Montos en bolívares al tasa de cada documento; ${v ? "las notas de crédito restan." : "importes de la factura del proveedor convertidos a la tasa de la compra."} Emitido el ${fmtFecha(hoy())}.</div></div>`, "", "min(1100px,100%)");
+}
+const libroCsv = safe(async () => {
+  const d = LIB.data; if (!d) return; const v = LIB.tipo === "ventas";
+  const head = v ? ["fecha", "tipo", "numero", "control", "cliente", "rif", "exento_bs", "base_bs", "iva_bs", "igtf_bs", "total_bs", "total_usd", "estado"]
+    : ["fecha", "fecha_factura", "proveedor", "rif", "factura", "control", "exento_bs", "base_bs", "iva_bs", "total_bs", "total_usd", "estado"];
+  const rows = d.items.map(f => v ? [f.fecha.slice(0, 10), f.tipo, docNum(f), f.control, f.cliente, f.rif, csvNum(f.exento_bs), csvNum(f.base_bs), csvNum(f.iva_bs), csvNum(f.igtf_bs), csvNum(f.total_bs), csvNum(f.total_usd), f.estado]
+    : [f.fecha.slice(0, 10), f.fact_fecha, f.proveedor, f.rif, f.fact_numero, f.fact_control, csvNum(f.exento_bs), csvNum(f.base_bs), csvNum(f.iva_bs), csvNum(f.total_bs), csvNum(f.total_usd), f.estado]);
+  await guardarArchivo(`libro_${LIB.tipo}_${d.desde}_${d.hasta}.csv`, toCsv(head, rows), "text/csv;charset=utf-8");
+});
+function completarControl(id) {
+  abrirModal(`<h3>Completar número de control</h3><form data-form="completarControl" data-id="${id}">
+    <div class="hint">Documento emitido en contingencia. Escriba el número de control que le asignó su imprenta digital o máquina fiscal. Solo se puede completar una vez.</div>
+    <div class="field"><label>Nº de control *</label><input name="control" required maxlength="40" autofocus></div>
+    <div class="mfoot"><button type="button" class="btn" data-act="cerrarModal">Cancelar</button><button class="btn pri" type="submit">Guardar</button></div></form>`);
+}
+
+/* alertas */
+function aplicarContingencia() { const c = $("#chipCont"); if (c) c.hidden = !(fiscalOn() && S.config.contingencia_activa === "1"); }
+async function cargarAlertas() {
+  try {
+    const r = await api("GET", "/api/alertas"); S.alertas = r.items;
+    const b = $("#btnAlertas"); b.hidden = r.n === 0; $("#alN").textContent = r.n;
+    b.classList.toggle("danger", r.criticas > 0);
+  } catch (e) {}
+}
+const AL_NIVEL = {crit: ["bad", "Urgente"], warn: ["warn", "Atención"], info: ["gray", "Sugerencia"]};
+function mostrarAlertas() {
+  const l = S.alertas || [];
+  abrirModal(`<h3>Avisos</h3>` + (l.length ? l.map(a => `<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)">
+    <span class="badge ${AL_NIVEL[a.nivel][0]}">${AL_NIVEL[a.nivel][1]}</span><div style="flex:1"><b>${esc(a.titulo)}</b><div class="small muted">${esc(a.detalle)}</div></div>
+    ${a.vista && VISTAS.some(v => v[0] === a.vista && (!v[3] || esAdmin())) ? `<button class="btn sm" data-act="alIr" data-v="${a.vista}">Ir</button>` : ""}</div>`).join("") : '<div class="empty">Sin avisos</div>') +
+    `<div class="mfoot"><button type="button" class="btn" data-act="cerrarModal">Cerrar</button></div>`);
+}
+
+/* respaldo externo */
+const cargarExterno = safe(async () => {
+  const r = await api("GET", "/api/backup/externo");
+  $("#reRuta").value = r.ruta; $("#reActivo").checked = r.activo;
+  const u = r.ultimo;
+  $("#reInfo").innerHTML = (r.error ? `<span class="badge bad">${esc(r.error)}</span> ` : "") +
+    (u ? (u.ok ? `Última copia externa: <b>${fmtFecha(u.fecha)}</b> <span class="badge ok">verificada</span>` : `<span class="badge bad">Falló la última copia externa</span> ${fmtFecha(u.fecha)} · ${esc(u.detalle)}`) : (r.ruta ? "Aún no hay copias externas." : "No configurado."));
+  $("#reBody").innerHTML = r.archivos.map(a => `<tr><td style="font-family:Consolas,monospace;font-size:12px">${esc(a.nombre)}</td><td class="nowrap">${fmtFecha(a.fecha)}</td><td class="right">${(a.bytes / 1024).toFixed(1)} KB</td></tr>`).join("") || `<tr><td colspan="3" class="empty">Sin copias</td></tr>`;
+});
+const guardarExterno = safe(async () => {
+  S.config = await api("PUT", "/api/config", {respaldo_externo_ruta: $("#reRuta").value.trim(), respaldo_externo_activo: $("#reActivo").checked ? "1" : "0"});
+  toast("Respaldo externo guardado", "ok"); cargarExterno(); cargarAlertas();
+});
+const probarExterno = safe(async () => { const r = await api("POST", "/api/backup/externo/probar", {ruta: $("#reRuta").value.trim()}); toast("La carpeta está disponible y se puede escribir en ella", "ok"); });
+const respaldarExterno = safe(async () => {
+  try { const r = await api("POST", "/api/backup/externo"); toast("Copia externa creada: " + r.nombre, "ok"); }
+  finally { cargarExterno(); cargarAlertas(); }
+});
 
 /* ============================== v0.5 · INVENTARIO AVANZADO ============================== */
 const cargarAlmacenes = async () => { S.almacenes = await api("GET", "/api/almacenes"); };
@@ -2495,6 +2644,12 @@ function formCompra() {
     <div class="grid3" id="coPago"><div class="field"><label>Se pagó en</label><select name="moneda"><option value="USD">Dólares (USD)</option><option value="BS">Bolívares (Bs)</option></select></div>
       <div class="field"><label>Método</label><select name="metodo">${Object.values(METODOS).map(m => `<option${m[0] === "Efectivo USD" ? " selected" : ""}>${m[0]}</option>`).join("")}</select></div>
       <label class="chk" style="align-self:end;padding-bottom:9px"><input type="checkbox" name="desde_caja"> Pagar desde la caja (sale del efectivo)</label></div>
+    <details style="margin:8px 0"><summary class="small muted" style="cursor:pointer">Factura del proveedor (para el libro de compras · opcional)</summary>
+      <div class="grid3" style="margin-top:8px"><div class="field"><label>Nº de factura</label><input name="fact_numero" maxlength="40"></div>
+        <div class="field"><label>Nº de control</label><input name="fact_control" maxlength="40"></div>
+        <div class="field"><label>Fecha de la factura</label><input name="fact_fecha" type="date"></div></div>
+      <div class="grid3"><div class="field"><label>IVA de la factura (USD)</label><input name="iva_usd" type="number" step="any" min="0" placeholder="0,00"></div>
+        <div class="field"><label>Monto exento (USD)</label><input name="exento_usd" type="number" step="any" min="0" placeholder="0,00"></div></div></details>
     <table class="lineas-compra"><thead><tr><th>Producto</th><th>Cantidad</th><th>Costo unit. USD</th><th>Lote</th><th>Vence</th><th class="right">Subtotal</th><th></th></tr></thead><tbody id="coFilas">${filaCompra()}${filaCompra()}${filaCompra()}</tbody></table>
     <div style="display:flex;justify-content:space-between;align-items:center"><button type="button" class="btn sm" data-act="addFila">＋ Línea</button><div class="tot main-tot" style="font-size:20px;gap:14px"><span>TOTAL</span><span id="coTotal">$0,00</span></div></div>
     <div class="grid3"><div class="field"><label>Costo del producto</label><select name="metodo_costo"><option value="ultimo">Usar el costo de esta compra</option><option value="promedio">Promedio ponderado con el stock</option><option value="ninguno">No cambiar el costo</option></select></div>
@@ -2551,6 +2706,11 @@ function calcPago2() {
 
 /* ============================== formularios ============================== */
 const FORMS = {
+  completarControl: async f => {
+  await api("POST", `/api/documentos/${f.dataset.id}/control`, {control: f.elements.control.value});
+  cerrarModal(); toast("Número de control registrado", "ok"); cargarAlertas();
+  if (S.vista === "libros") cargarLibro(); else if (S.vista === "documentos") cargarDocumentos();
+},
   login: async f => {
     const d = Object.fromEntries(new FormData(f)); $("#lgErr").textContent = "";
     try {
@@ -2712,6 +2872,7 @@ const FORMS = {
     const contado = d.condicion === "contado";
     const c = await api("POST", "/api/compras", {proveedor_id: d.proveedor_id || null, proveedor_nombre: d.proveedor_nombre, referencia: d.referencia, almacen_id: +d.almacen_id,
       condicion: d.condicion, tasa: d.tasa, moneda: d.moneda, metodo: d.metodo, desde_caja: contado && !!f.elements.desde_caja.checked, items,
+      fact_numero: d.fact_numero, fact_control: d.fact_control, fact_fecha: d.fact_fecha, iva_usd: d.iva_usd || "0", exento_usd: d.exento_usd || "0",
       metodo_costo: d.metodo_costo, recalcular_precio: !!f.elements.recalcular_precio.checked, notas: d.notas});
     cerrarModal(); await Promise.all([cargarProductos(), cargarTurno()]); renderCompras(); toast(`Compra #${c.id} registrada: ${usd(c.total_usd)}`, "ok");
   },
@@ -2737,9 +2898,11 @@ const FORMS = {
       control_prefijo: d.control_prefijo, control_digitos: d.control_digitos, sig_control: d.sig_control, control_hasta: d.control_hasta,
       fiscal_exige_cliente: f.elements.fiscal_exige_cliente.checked ? "1" : "0", fiscal_permite_anular: f.elements.fiscal_permite_anular.checked ? "1" : "0",
       igtf_activo: f.elements.igtf_activo.checked ? "1" : "0", igtf_pct: d.igtf_pct,
+      contingencia_activa: f.elements.contingencia_activa.checked ? "1" : "0", contingencia_motivo: d.contingencia_motivo,
+      alerta_respaldo_dias: d.alerta_respaldo_dias, alerta_rango_restante: d.alerta_rango_restante,
       igtf_metodos: $$("#igtfMetodos [data-igtf]").filter(x => x.checked).map(x => x.dataset.igtf).join(","),
     });
-    pintarFiscal();
+    pintarFiscal(); aplicarContingencia(); cargarAlertas();
     await cargarProductos();
     S.tasa = parseFloat(S.config.tasa_bcv) || 1; actualizarTasaUI(); sessionStorage.removeItem("mv_tema"); aplicarTema(); toast("Configuración guardada", "ok");
   },
@@ -2757,6 +2920,10 @@ const ACT = {
   tema: () => { const oscuro = !document.documentElement.classList.contains("dark"); sessionStorage.setItem("mv_tema", oscuro ? "oscuro" : "claro"); aplicarTema(); },
   cerrarModal, cerrarTicket, imprimir: () => window.print(),
   contacto: () => abrirContacto(), cerrarContacto,
+  alertas: () => mostrarAlertas(), alIr: el => { cerrarModal(); ir(el.dataset.v); },
+  libroTipo: el => { LIB.tipo = el.dataset.t; cargarLibro(); }, libroVer: () => cargarLibro(), libroImprimir: () => libroImprimir(), libroCsv: () => libroCsv(),
+  completarControl: el => completarControl(el.dataset.id),
+  reProbar: () => probarExterno(), reGuardar: () => guardarExterno(), reAhora: () => respaldarExterno(),
   updBuscar: () => buscarActualizacion(true), updInstalar: () => instalarActualizacion(),
   updCopiar: () => copiarTexto((S.upd && S.upd.pagina) || ""),
   docFactura: el => { cerrarTicket(); docDeVenta("factura", +el.dataset.id); },

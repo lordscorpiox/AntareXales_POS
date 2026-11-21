@@ -3,6 +3,16 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.13
+Tercera entrega de la adecuación fiscal y **Configuración homogénea**. El modo fiscal sigue **desactivado por defecto**; todo es configurable.
+- **Configuración homogénea**: ya no hay pestañas en una ventana pequeña. Cada sección es un **submenú de Configuración** con su **ventana completa**, igual que el resto de módulos: General · Ventas e inventario · Impuestos y documentos · Fiscal · Usuarios · Respaldo · Bitácora · Actualizaciones · Acerca de. Cada sección de ajustes tiene su botón «Guardar cambios»; al pasar de una sección a otra no se pierde lo editado.
+- **Libros fiscales** (menú «Libros fiscales», solo administrador): **libro de ventas** (facturas, notas de crédito —restan— y notas de débito, con control, cliente, exento/base/IVA/IGTF y totales en Bs y USD, resumen por alícuota; los anulados salen en cero) y **libro de compras** (con los datos de la factura del proveedor que se anotan al registrar la compra: Nº de factura, control, fecha, IVA y exento). Filtro por período, **imprimir** (ventana interna) y **exportar a CSV** (para Excel).
+- **Contingencia** (Configuración › Fiscal): cuando la imprenta digital o la máquina fiscal no están disponibles se puede facturar **sin número de control**; la factura queda marcada «Control pendiente» y el administrador lo completa después (Documentos o Libros fiscales; una sola vez, queda en la bitácora). El número de control completado ya no se puede cambiar.
+- **Respaldo externo** (Configuración › Respaldo): copia **verificada** (comprobación de integridad) de la base de datos en una carpeta fuera de los datos de la aplicación (otro disco, USB o carpeta sincronizada), automática cada día y con cada respaldo, con rotación y botón «Respaldar ahora».
+- **Alertas** (campana 🔔 en la barra superior, con avisos «Atención/Urgente»): contingencia activa y documentos sin control, rango de números de control por agotarse o agotado, sin respaldos o respaldo viejo (días configurables), respaldo externo fallido o carpeta desconectada, y sugerencia de respaldo externo en modo fiscal. Se actualizan solas cada 5 minutos.
+- Migración automática desde la 0.12 (nuevas columnas y regla del número de control); pruebas nuevas (`test_v013.py`, `e2e_v013.py`).
+- Pendiente (opcional): conexión directa con una imprenta digital.
+
 ## 0.12
 Segunda entrega de la adecuación fiscal: **corregir sin borrar y dejar rastro**. Con el modo fiscal apagado todo funciona como antes (las notas y la bitácora están disponibles siempre).
 - **Notas de crédito y de débito** (Documentos › botones en cada factura emitida): una factura emitida no se edita, se corrige con una nota.

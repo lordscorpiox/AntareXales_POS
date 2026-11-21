@@ -18,27 +18,27 @@ try:
         pg.wait_for_selector("#login", state="hidden", timeout=15000)
         pg.wait_for_timeout(2500)
         # --- por defecto: sin IGTF ni fiscal
-        pg.click('[data-act=ir][data-v=config]'); pg.wait_for_selector("#cfgTabs")
-        pg.click('#cfgTabs [data-t=fiscal]')
+        pg.click('[data-act=ir][data-v=config]'); pg.wait_for_selector("#v-cfg-general.on")
+        pg.click('#nav [data-v=cfg-fiscal]')
         assert pg.locator("#fiscalPasos .fpaso").count() >= 5
         assert pg.locator("#fiscalPasos .fpaso.no").count() >= 3, "debe mostrar pendientes"
         pg.fill('[name=tasa_bcv]', "50") if pg.locator('[name=tasa_bcv]').is_visible() else None
         # activar sin requisitos → error
-        pg.check('[name=fiscal_activo]'); pg.click('#cfgPie button[type=submit], #cfgForm button[type=submit]')
+        pg.check('[name=fiscal_activo]'); pg.click('#v-cfg-fiscal button[type=submit]')
         pg.wait_for_timeout(800)
         assert "Falta" in pg.inner_text("#toasts, .toast, body"), "debe rechazar la activación"
         pg.uncheck('[name=fiscal_activo]')
         # completar requisitos
-        pg.click('#cfgTabs [data-t=general]')
+        pg.click('#nav [data-v=cfg-general]')
         pg.fill('[name=negocio_nombre]', "Prueba"); pg.fill('[name=rif]', "J-07013380-5"); pg.fill('[name=direccion]', "Av. Guayana")
-        pg.click('#cfgTabs [data-t=impuestos]'); pg.check('[name=iva_activo]'); pg.select_option('[name=iva_modo]', "adicional")
-        pg.click('#cfgTabs [data-t=fiscal]'); pg.fill('[name=fiscal_razon_social]', "Prueba C.A.")
+        pg.click('#nav [data-v=cfg-impuestos]'); pg.check('[name=iva_activo]'); pg.select_option('[name=iva_modo]', "adicional")
+        pg.click('#nav [data-v=cfg-fiscal]'); pg.fill('[name=fiscal_razon_social]', "Prueba C.A.")
         pg.check('[name=igtf_activo]')
         pg.check('[name=fiscal_activo]')
-        pg.click('#cfgForm button[type=submit]'); pg.wait_for_timeout(1200)
-        pg.click('#cfgTabs [data-t=fiscal]')
+        pg.click('#v-cfg-fiscal button[type=submit]'); pg.wait_for_timeout(1200)
+        pg.click('#nav [data-v=cfg-fiscal]')
         assert pg.locator("#fiscalPasos .fpaso.no").count() == 0, pg.inner_text("#fiscalPasos")
-        assert "Fiscal ●" in pg.inner_text("#cfgTabFiscal")
+        assert "Fiscal ●" in pg.inner_text("#nav [data-v=cfg-fiscal]")
         pg.screenshot(path=os.path.join(AQUI, "shot_fiscal_cfg.png"))
         # --- crear productos por API con la sesión de la página
         tok = pg.evaluate("S.token")

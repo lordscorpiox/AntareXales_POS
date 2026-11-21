@@ -59,8 +59,15 @@ El botón 🖼 junto al buscador de Ventas muestra u oculta las fotos (vista com
 - En *Documentos*, cada factura emitida tiene «Nota de crédito» y «Nota de débito». Una factura emitida no se edita; con el modo fiscal activo tampoco se anula (salvo que se permita en *Fiscal*, con motivo).
 - *Configuración › Bitácora* (administrador): registro de auditoría que solo se agrega.
 
+## Libros, contingencia, respaldo externo y alertas (v0.13)
+- **Configuración**: cada sección es un submenú con su ventana completa (General, Ventas e inventario, Impuestos y documentos, Fiscal, Usuarios, Respaldo, Bitácora, Actualizaciones, Acerca de).
+- **Libros fiscales**: libro de ventas y de compras por período, con impresión y exportación a CSV. Para el libro de compras, anote los datos de la factura del proveedor al registrar la compra (opcional).
+- **Contingencia** (Configuración › Fiscal): permite facturar sin número de control mientras no haya imprenta digital o máquina fiscal; el control se completa después.
+- **Respaldo externo** (Configuración › Respaldo): copia verificada a otra carpeta/disco/USB, diaria y bajo demanda.
+- **Alertas**: campana en la barra superior (rango de control, respaldos, contingencia). Es una ayuda: confirme con su contador o el SENIAT lo que le corresponde.
+
 ## Pruebas
-`bash tests/run_all.sh` ejecuta las pruebas de API; `tests/e2e_fiscal.py`, `e2e_v012.py`, `e2e8.py` y `e2e10.py` usan Playwright (levantan `tests/run_server.py`; `e2e8`/`e2e10` esperan el puerto 5000).
+`bash tests/run_all.sh` ejecuta las pruebas de API; `tests/e2e_fiscal.py`, `e2e_v012.py`, `e2e_v013.py`, `e2e8.py` y `e2e10.py` usan Playwright (levantan `tests/run_server.py`; `e2e8`/`e2e10` esperan el puerto 5000).
 
 ## Caja, compras e inventario avanzado (v0.5)
 - **Caja**: abra su turno con el fondo inicial al empezar; al cerrar, cuente el efectivo (Bs y USD) y el sistema muestra faltante/sobrante e imprime el reporte de cierre. Gastos y retiros de caja entran en el cálculo. *Configuración › Caja obligatoria* exige turno abierto para cobrar.
