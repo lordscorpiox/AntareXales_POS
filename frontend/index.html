@@ -318,19 +318,20 @@ table.tbl{width:100%;border-collapse:collapse}
 #splashRain{position:absolute;inset:0;width:100%;height:100%}
 #splash .sp-center{position:relative;text-align:center;padding:0 16px}
 #splash .sp-name{display:inline-flex;align-items:baseline;justify-content:center;font-family:"Inter","Segoe UI",system-ui,sans-serif;font-weight:800;letter-spacing:-.03em;color:#fff;font-size:clamp(38px,9vw,104px);line-height:1.15;white-space:nowrap;filter:drop-shadow(0 0 18px rgba(20,20,40,.9))}
-#splash .sp-l{display:inline-block;overflow:hidden;max-width:0;opacity:0;padding:.04em 0;text-shadow:0 0 22px rgba(47,125,255,.55);animation:spExpand 1.25s cubic-bezier(.16,.84,.24,1) 1.55s forwards}
+#splash .sp-c{display:inline-block;padding:.04em 0;opacity:0;transform:translateY(.28em);filter:blur(8px);text-shadow:0 0 22px rgba(47,125,255,.55);animation:spLetter .9s cubic-bezier(.2,.8,.2,1) calc(2.3s + var(--d) * .14s) forwards}
+#splash .sp-sp{display:inline-block;width:.28em;white-space:pre;overflow:hidden}
 #splash .sp-x{display:inline-block;color:#ff2d46;opacity:0;transform:scale(2.6);filter:blur(14px);position:relative;
-  animation:spX .9s cubic-bezier(.2,.9,.3,1) .35s forwards,spGlow 1.15s ease-in-out 1.25s infinite alternate}
+  animation:spX 1.5s cubic-bezier(.2,.9,.3,1) .5s forwards,spGlow 1.4s ease-in-out 2s infinite alternate}
 #splash .sp-x::after{content:"";position:absolute;left:50%;top:52%;width:2.2em;height:2.2em;transform:translate(-50%,-50%) scale(0);border-radius:50%;pointer-events:none;
-  background:radial-gradient(circle,rgba(255,45,70,.55),rgba(255,45,70,0) 68%);animation:spFlash 1.6s ease-out .55s forwards}
-#splash .sp-tag{margin-top:18px;letter-spacing:.5em;font-size:clamp(10px,1.4vw,15px);color:#6aa3ff;text-transform:uppercase;font-weight:700;opacity:0;animation:spFade .8s ease 2.9s forwards;text-shadow:0 0 14px rgba(47,125,255,.8)}
+  background:radial-gradient(circle,rgba(255,45,70,.55),rgba(255,45,70,0) 68%);animation:spFlash 2s ease-out .8s forwards}
+#splash .sp-tag{margin-top:18px;letter-spacing:.5em;font-size:clamp(10px,1.4vw,15px);color:#6aa3ff;text-transform:uppercase;font-weight:700;opacity:0;animation:spFade 1s ease 4.3s forwards;text-shadow:0 0 14px rgba(47,125,255,.8)}
 #splash .sp-skip{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-size:11px;letter-spacing:.12em;color:#4a5a86;text-transform:uppercase;opacity:0;animation:spFade .6s ease 1.2s forwards}
 @keyframes spX{0%{opacity:0;transform:scale(2.6);filter:blur(14px)}60%{opacity:1}100%{opacity:1;transform:scale(1);filter:blur(0)}}
 @keyframes spGlow{from{text-shadow:0 0 8px #ff2d46,0 0 22px #e5384d,0 0 44px rgba(229,56,77,.55)}to{text-shadow:0 0 14px #ff5a6e,0 0 38px #ff2d46,0 0 86px rgba(255,45,70,.85),0 0 130px rgba(255,45,70,.45)}}
 @keyframes spFlash{0%{transform:translate(-50%,-50%) scale(0);opacity:1}100%{transform:translate(-50%,-50%) scale(3.2);opacity:0}}
-@keyframes spExpand{to{max-width:7em;opacity:1}}
+@keyframes spLetter{to{opacity:1;transform:none;filter:blur(0)}}
 @keyframes spFade{to{opacity:1}}
-@media (prefers-reduced-motion:reduce){#splash .sp-l,#splash .sp-x,#splash .sp-tag,#splash .sp-skip{animation:none!important;max-width:7em;opacity:1;transform:none;filter:none}#splash .sp-x{text-shadow:0 0 18px #ff2d46,0 0 44px rgba(229,56,77,.6)}}
+@media (prefers-reduced-motion:reduce){#splash .sp-c,#splash .sp-x,#splash .sp-tag,#splash .sp-skip{animation:none!important;opacity:1;transform:none;filter:none}#splash .sp-x{text-shadow:0 0 18px #ff2d46,0 0 44px rgba(229,56,77,.6)}}
 </style>
 </head>
 <body>
@@ -338,7 +339,7 @@ table.tbl{width:100%;border-collapse:collapse}
 <div id="splash" aria-hidden="true">
   <canvas id="splashRain"></canvas>
   <div class="sp-center">
-    <div class="sp-name"><span class="sp-l">Antare</span><span class="sp-x">X</span><span class="sp-l">ales POS</span></div>
+    <div class="sp-name" aria-label="AntareXales POS"><span class="sp-c" style="--d:6">A</span><span class="sp-c" style="--d:5">n</span><span class="sp-c" style="--d:4">t</span><span class="sp-c" style="--d:3">a</span><span class="sp-c" style="--d:2">r</span><span class="sp-c" style="--d:1">e</span><span class="sp-x">X</span><span class="sp-c" style="--d:1">a</span><span class="sp-c" style="--d:2">l</span><span class="sp-c" style="--d:3">e</span><span class="sp-c" style="--d:4">s</span><span class="sp-sp"> </span><span class="sp-c" style="--d:6">P</span><span class="sp-c" style="--d:7">O</span><span class="sp-c" style="--d:8">S</span></div>
     <div class="sp-tag">Punto de venta</div>
   </div>
   <div class="sp-skip">Clic para continuar</div>
@@ -351,23 +352,34 @@ table.tbl{width:100%;border-collapse:collapse}
   const reducir = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const cv = document.getElementById("splashRain"), cx = cv.getContext("2d");
   const SIMB = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾅﾆﾇﾈﾊﾋﾎﾏﾐﾑﾒﾓﾔﾕﾗﾘﾜ0123456789<>/{}[]$%#@&*+=:;ΣΩ∆".split("");
-  const TAM = 18; let cols = [], ancho = 0, alto = 0, raf = 0, ult = 0, cerrado = false;
+  // Lluvia nítida: cada cuadro se redibuja completo (sin acumular estelas semitransparentes que emborronan los caracteres).
+  // Cada columna tiene su propia velocidad y una cola con un carácter fijo por celda que se apaga poco a poco.
+  const TAM = 20, COLA = 16, FPS = 30; let cols = [], filas = 0, ancho = 0, alto = 0, raf = 0, ult = 0, cerrado = false, d = 1;
+  const al = n => (Math.random() * n) | 0;
   function medir() {
-    const d = Math.min(window.devicePixelRatio || 1, 2); ancho = innerWidth; alto = innerHeight;
-    cv.width = ancho * d; cv.height = alto * d; cx.setTransform(d, 0, 0, d, 0, 0);
-    cx.fillStyle = "#03050c"; cx.fillRect(0, 0, ancho, alto);
-    const n = Math.ceil(ancho / TAM); cols = Array.from({length: n}, (_, i) => cols[i] ?? -Math.random() * alto / TAM);
+    d = Math.min(window.devicePixelRatio || 1, 2); ancho = innerWidth; alto = innerHeight;
+    cv.width = Math.round(ancho * d); cv.height = Math.round(alto * d); cx.setTransform(d, 0, 0, d, 0, 0);
+    filas = Math.ceil(alto / TAM) + COLA + 2;
+    const n = Math.ceil(ancho / TAM);
+    cols = Array.from({length: n}, (_, i) => cols[i] || {y: -Math.random() * (filas + 20), v: 6 + Math.random() * 9, g: []});
+    cols.length = n;
   }
   function pintar(t) {
     raf = requestAnimationFrame(pintar);
-    if (t - ult < 45) return; ult = t;               // ~22 cuadros por segundo: efecto clásico y ligero
-    cx.fillStyle = "rgba(3,5,12,.09)"; cx.fillRect(0, 0, ancho, alto);
-    cx.font = `700 ${TAM - 2}px "Consolas","Courier New",monospace`;
+    if (t - ult < 1000 / FPS) return; const dt = Math.min((t - ult) / 1000, .1); ult = t;
+    cx.clearRect(0, 0, ancho, alto);
+    cx.font = `600 ${TAM - 4}px "Consolas","Lucida Console","Courier New",monospace`; cx.textBaseline = "top"; cx.textAlign = "center";
     for (let i = 0; i < cols.length; i++) {
-      const y = cols[i] * TAM, c = SIMB[(Math.random() * SIMB.length) | 0];
-      cx.fillStyle = "#d6ecff"; cx.shadowColor = "#1f8bff"; cx.shadowBlur = 10; cx.fillText(c, i * TAM, y);   // cabeza brillante
-      cx.shadowBlur = 0; cx.fillStyle = Math.random() < .5 ? "#1f8bff" : "#0a6cff"; cx.fillText(SIMB[(Math.random() * SIMB.length) | 0], i * TAM, y - TAM);
-      cols[i] = y > alto && Math.random() > .972 ? 0 : cols[i] + 1;
+      const c = cols[i]; c.y += c.v * dt;
+      if (c.y - COLA > filas - COLA - 2 && Math.random() > .985) { c.y = -Math.random() * 8; c.v = 6 + Math.random() * 9; }
+      const cab = Math.floor(c.y), x = i * TAM + TAM / 2;
+      for (let k = 0; k < COLA; k++) {
+        const f = cab - k; if (f < 0 || f * TAM > alto) continue;
+        if (c.g[f] === undefined || (k > 1 && Math.random() < .004)) c.g[f] = SIMB[al(SIMB.length)];
+        if (k === 0) { cx.fillStyle = "rgba(225,242,255,.95)"; }
+        else { const a = Math.pow(1 - k / COLA, 1.6) * .8; cx.fillStyle = `rgba(${k < 3 ? "60,150,255" : "20,110,255"},${a.toFixed(3)})`; }
+        cx.fillText(c.g[f], x, f * TAM);
+      }
     }
   }
   function cerrar() {
@@ -376,7 +388,7 @@ table.tbl{width:100%;border-collapse:collapse}
   }
   if (!reducir) { medir(); addEventListener("resize", medir); raf = requestAnimationFrame(pintar); }
   sp.addEventListener("click", cerrar); addEventListener("keydown", cerrar, {once: true});
-  setTimeout(cerrar, reducir ? 1400 : 4600);
+  setTimeout(cerrar, reducir ? 1400 : 7000);
 })();
 </script>
 

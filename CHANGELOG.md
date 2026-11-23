@@ -3,6 +3,11 @@
 La versión vigente está en `version.py` (única fuente: la ventana, el login, el menú lateral y «Acerca de» la leen de ahí).
 Cada ajuste sube el número y agrega una entrada aquí.
 
+## 0.13.1
+Corrección de la pantalla inicial animada.
+- **Nombre más pausado**: las letras ya no aparecen de golpe; entran una a una (con un leve ascenso y enfoque), desde la X hacia los extremos, y luego aparece «Punto de venta». La X roja también entra más despacio. La pantalla dura unos 7 s (un clic o una tecla la salta).
+- **Lluvia de símbolos nítida**: los caracteres se veían borrosos porque cada cuadro se dibujaba encima del anterior; ahora se redibuja completo, cada columna lleva su velocidad y una cola que se apaga gradualmente, sin estelas empastadas.
+
 ## 0.13
 Tercera entrega de la adecuación fiscal y **Configuración homogénea**. El modo fiscal sigue **desactivado por defecto**; todo es configurable.
 - **Configuración homogénea**: ya no hay pestañas en una ventana pequeña. Cada sección es un **submenú de Configuración** con su **ventana completa**, igual que el resto de módulos: General · Ventas e inventario · Impuestos y documentos · Fiscal · Usuarios · Respaldo · Bitácora · Actualizaciones · Acerca de. Cada sección de ajustes tiene su botón «Guardar cambios»; al pasar de una sección a otra no se pierde lo editado.

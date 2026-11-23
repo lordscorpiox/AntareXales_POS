@@ -4,7 +4,7 @@
 Cada vez que se haga un ajuste, suba VERSION y agregue su entrada en CHANGELOG.md.
 """
 APP_NAME = "AntareXales POS"
-VERSION = "0.13"
+VERSION = "0.13.1"
 # Repositorio de GitHub donde se publican los Releases (con el .exe y su SHA-256) que usa «Buscar actualizaciones».
 GITHUB_REPO = "lordscorpiox/AntareXales_POS"
 AUTHOR = "Lord Scorpiox"
